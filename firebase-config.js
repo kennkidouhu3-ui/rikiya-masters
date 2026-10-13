@@ -1,10 +1,9 @@
-// ★ここに、商人物語（akimono）の index.html に入っている firebaseConfig と同じ内容を貼ってください。
-// 「ここに貼る」の部分を、自分の値に書きかえます（引用符 " は残します）。
+// rikiyaマスターズ用 Firebase設定（プロジェクト akimono-61b9b）
 const FIREBASE_CONFIG = {
-  apiKey: "ここに貼る",
-  authDomain: "ここに貼る",
-  projectId: "ここに貼る",
-  storageBucket: "ここに貼る",
-  messagingSenderId: "ここに貼る",
-  appId: "ここに貼る"
+  apiKey: "AIzaSyD9sWPvqtslwyAs4F-h4BkoX_2NM7eKLyo",
+  authDomain: "akimono-61b9b.firebaseapp.com",
+  projectId: "akimono-61b9b",
+  storageBucket: "akimono-61b9b.firebasestorage.app",
+  messagingSenderId: "154186388919",
+  appId: "1:154186388919:web:001d7ace8a4a8a90248432"
 };
