@@ -884,7 +884,7 @@ async function netInit(){
     if(typeof FIREBASE_CONFIG==='undefined'||!FIREBASE_CONFIG||!FIREBASE_CONFIG.apiKey||String(FIREBASE_CONFIG.apiKey).indexOf('ここ')>=0){throw {message:'firebase-config.js に、Firebaseの設定（firebaseConfig）がまだ入っていません。'};}
     firebase.initializeApp(FIREBASE_CONFIG);
     await firebase.auth().signInAnonymously();
-    NET.db=fsAdapter(firebase.firestore());NET.canWrite=true;
+    const fsi=firebase.firestore();try{fsi.settings({experimentalAutoDetectLongPolling:true,experimentalForceLongPolling:true,merge:true});}catch(_e){}NET.db=fsAdapter(fsi);NET.canWrite=true;
   }catch(e){NET.db=null;NET.err=(e&&e.message)||String(e);}
   render();
 }
@@ -955,13 +955,14 @@ function explainErr(e,what){
   if(c==='quota_exceeded')return what+'：保存の上限に達しました。（'+c+'）';
   if(c==='resource_exhausted')return what+'：操作が多すぎます。少し待ってからもう一度試してください。';
   if(c==='unavailable')return what+'：通信が不安定です。もう一度試してください。';
+  if(c==='timeout')return what+'：10秒待ってもFirebaseから返事がありません。Firestoreのデータベースが作成されていない、または通信がふさがれている可能性があります。Firebaseコンソールの「Firestore Database」を確認してください。';
   return what+'：'+((e&&(e.code||e.message))||'原因不明');
 }
 async function hostCreate(){
   if(!NET.db||NET.role||NET.busy)return;
   if(NET.canWrite===false){NET.err=WRITE_MSG;render();return;}
   const code=genCode();NET.err='';NET.busy=true;render();
-  try{await NET.db.doc(`games/${code}`).set({phase:'lobby',t:Date.now()});}
+  try{await Promise.race([NET.db.doc(`games/${code}`).set({phase:'lobby',t:Date.now()}),new Promise((_,rej)=>setTimeout(()=>rej({code:'timeout'}),10000))]);}
   catch(e){NET.busy=false;NET.err=explainErr(e,'部屋をつくれませんでした');render();return;}
   NET.busy=false;
   resetNet();NET.role='host';NET.code=code;NET.askBase=Math.random().toString(36).slice(2,8);ME=0;NET.err='';
