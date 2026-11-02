@@ -817,7 +817,7 @@ let CARD_IDS=Object.keys(DEFS).filter(k=>!DEFS[k].gr);
 /* ===== 基本 ===== */
 const CIVC={'光':'#e3b92f','水':'#2f9be0','闇':'#7a4fb0','火':'#d9453a','自然':'#38a047','無':'#9aa1ad'};
 let NORENDER=false, FAST=false, UID=0;
-const sleep=ms=>FAST?Promise.resolve():new Promise(r=>setTimeout(r,ms));
+const sleep=ms=>FAST?Promise.resolve():new Promise(r=>setTimeout(r,(typeof NET!=='undefined'&&NET.role)?Math.round(ms*0.35):ms));
 let G=null;
 let ME=0;
 let NET={role:null,db:undefined,code:null,unsubs:[],err:'',canWrite:null,askBase:0,askN:0,actN:0,pend:null};
@@ -10097,7 +10097,7 @@ async function netInit(){
     if(typeof FIREBASE_CONFIG==='undefined'||!FIREBASE_CONFIG||!FIREBASE_CONFIG.apiKey||String(FIREBASE_CONFIG.apiKey).indexOf('ここ')>=0){throw {message:'firebase-config.js に、Firebaseの設定（firebaseConfig）がまだ入っていません。'};}
     firebase.initializeApp(FIREBASE_CONFIG);
     await firebase.auth().signInAnonymously();
-    const fsi=firebase.firestore();try{fsi.settings({experimentalAutoDetectLongPolling:true,experimentalForceLongPolling:true,merge:true});}catch(_e){}NET.db=fsAdapter(fsi);NET.canWrite=true;
+    const fsi=firebase.firestore();try{fsi.settings({experimentalAutoDetectLongPolling:true,merge:true});}catch(_e){}NET.db=fsAdapter(fsi);NET.canWrite=true;
   }catch(e){NET.db=null;NET.err=(e&&e.message)||String(e);}
   render();
 }
@@ -10114,7 +10114,7 @@ async function leaveNet(msg){
 }
 function schedulePublish(){
   if(NET.role!=='host'||!NET.db||!G||NET.pubT)return;
-  NET.pubT=setTimeout(doPublish,FAST?0:400);
+  NET.pubT=setTimeout(doPublish,FAST?0:60);
 }
 async function doPublish(){
   NET.pubT=null;
@@ -10131,7 +10131,8 @@ async function doPublish(){
 function remoteAsk(pi,payload){
   return new Promise(res=>{
     const seq=`${NET.askBase}-${++NET.askN}`;NET.pend={seq,res};G.wait=pi;render();
-    gdoc('-ask').set(Object.assign({seq,pi},payload)).catch(e=>netErr('通信エラー（質問の送信）：'+((e&&(e.code||e.message))||'')));
+    if(NET.pubT){clearTimeout(NET.pubT);NET.pubT=null;}
+    Promise.resolve(doPublish()).then(()=>gdoc('-ask').set(Object.assign({seq,pi},payload))).catch(e=>netErr('通信エラー（質問の送信）：'+((e&&(e.code||e.message))||'')));
   });
 }
 function handleAns(snap){
