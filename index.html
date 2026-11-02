@@ -868,6 +868,8 @@ const oppElems=pi=>[...targetable(pi),...(G.p[1-pi].ts||[])];
 const inPlay=(pi,c)=>G.p[pi].bz.includes(c)||(G.p[pi].ts||[]).includes(c);
 const ningyoOn=q=>!!G&&G.cur===q&&G.p[1-q].bz.some(x=>D(x).ningyo&&!ignored(x));
 const kareikoOn=()=>!!G&&G.p.some(P=>(P.ts||[]).some(x=>D(x).kareiko&&!ignored(x)));
+const isTama=x=>{const d=DEFS[x.id];return d.type==='t'&&!d.field&&!d.castle;};
+const crOrTama=x=>DEFS[x.id].type==='c'||isTama(x);
 const findBz=uid=>allBZ().find(x=>x.uid===uid);
 const findEl=uid=>[...elems(0),...elems(1)].find(x=>x.uid===uid);
 function jokerCount(pi){const P=G.p[pi];return P.bz.filter(isJ).length+P.mana.filter(m=>isJ(m.card)).length;}
@@ -928,7 +930,7 @@ function pow(c,atk){
 const wp=c=>c.owner!==undefined?pow(c):D(c).power||0;
 const weakPick=l=>[...l].sort((a,b)=>cmp(wp(a),wp(b)))[0];
 const strongPick=l=>[...l].sort((a,b)=>cmp(wp(b),wp(a)))[0];
-const lbl=c=>{const d=D(c);if(d.type==='t')return `${d.name}（タマシード）`;return c.owner!==undefined&&d.type==='c'?`${d.name}（パワー${powTxt(pow(c))}）`:`${d.name}（コスト${costTxt(d.cost)}）`;};
+const lbl=c=>{const d=D(c);if(d.type==='t')return `${d.name}（${d.field||'タマシード'}）`;return c.owner!==undefined&&d.type==='c'?`${d.name}（パワー${powTxt(pow(c))}）`:`${d.name}（コスト${costTxt(d.cost)}）`;};
 function numAtkLocked(c){const v=DEFS[c.id].cost;return !!(G&&G.numLock2&&G.numLock2.some(l=>l.t===c.owner&&l.atk&&v===l.n));}
 function parityLocked(c){const v=DEFS[c.id].cost;return !!(G&&G.parity&&v!==INF&&G.parity.some(l=>l.t===c.owner&&v%2===l.par));}
 function revLocked(c){return !!(G&&G.revLock&&G.revLock.some(l=>l.t===c.owner));}
@@ -1190,7 +1192,7 @@ function fushigiCands(pi,card){
 function playOptions(pi,card,zone){
   const d=D(card),out=[],P=G.p[pi];
   if(zone==='hand'){
-    const lab=d.type==='c'?(d.evo||d.neo?'進化・召喚する':'召喚する'):d.type==='t'?'タマシードを出す':'呪文を唱える';
+    const lab=d.type==='c'?(d.evo||d.neo?'進化・召喚する':'召喚する'):d.type==='t'?(d.field?(d.field+'を出す'):'タマシードを出す'):'呪文を唱える';
     out.push({key:'c',label:lab,why:castReason(pi,card,'c','hand')});
     if(d.side){const w=castReason(pi,card,'s','hand');out.push({key:'s',label:`ツインパクト「${d.side.name}」を唱える`,why:w});}
     if(d.freeIf){out.push({key:'free',label:'G・ゼロ：コストを支払わずに実行',why:freeOK(pi,card)?'':'条件を満たしていません'});}
@@ -1537,7 +1539,7 @@ async function putOnBZ(pi,card,o={}){
   }
   if(hasKw(c,'justDiver'))c.dive=true;
   if(d.glink&&d.type==='c'&&!o.noLink)await offerLink(pi,c);
-  log(`${P.name}は『${d.name}』を${d.type==='t'?'出した（タマシード）':'バトルゾーンに出した'}${o.under&&o.under.length?'（進化）':''}`);
+  log(`${P.name}は『${d.name}』を${d.type==='t'?`出した（${d.field||'タマシード'}）`:'バトルゾーンに出した'}${o.under&&o.under.length?'（進化）':''}`);
   render();await sleep(450);
   if(d.smax&&!G.over){
     const sm=P.bz.filter(x=>D(x).smax&&x!==c);
@@ -3100,7 +3102,7 @@ async function doPlay(pi,uid,key){
   const op=playOptions(pi,f.card,f.zone).find(o=>o.key===key);
   if(!op||op.why)return;
   if(pi===ME)UI.sheet=null;G.busy=true;render();
-  try{await runPlay(pi,f.card,f.zone,key);}catch(e){console.error(e);log('エラーが起きました：'+(e&&e.message));}
+  try{await runPlay(pi,f.card,f.zone,key);if(!G.over)await zeroCheck();}catch(e){console.error(e);log('エラーが起きました：'+(e&&e.message));}
   if(await skipCheck(pi))return;
   if(!G.over){G.busy=false;render();}
 }
@@ -3154,7 +3156,7 @@ async function graveWatch(){
     for(const q of [0,1]){
       if(G.over)return;
       const P=G.p[q];
-      if(nw[1-q].length&&P.bz.some(x=>D(x).oparts&&!ignored(x))&&await askYN(q,'オーパーツ銃：相手の墓地にカードが置かれた。カードを1枚引きますか？',null,P.deck.length>12))await draw(q,1);
+      if(nw[1-q].length){for(const ox of P.bz.filter(x=>D(x).oparts&&!ignored(x))){if(G.over||!P.bz.includes(ox))break;if(await askYN(q,`『${nameOf(ox)}』：相手の墓地にカードが置かれた。カードを1枚引きますか？`,ox,P.deck.length>12))await draw(q,1);}}
       if(G.over)return;
       G.venomT=G.venomT||[null,null];
       if(nw[1-q].length&&G.venomT[q]!==G.turnNo&&P.bz.some(x=>D(x).venom&&!ignored(x))){G.venomT[q]=G.turnNo;if(await askYN(q,'ヴェノム・ランブル：相手の墓地にカードが置かれた。カードを1枚引きますか？',null,P.deck.length>10))await draw(q,1);}
@@ -3305,7 +3307,7 @@ async function powMod(t,v){
 /* 状況起因処理：パワー0以下のクリーチャーを破壊（EXライフなどで残ったら、もう一度確認） */
 async function zeroCheck(){
   if(G.zcBusy)return;G.zcBusy=true;
-  try{for(let k=0;k<20&&!G.over;k++){const L=[0,1].flatMap(q=>G.p[q].bz.filter(x=>D(x).type==='c'&&!x.dive&&pow(x)!==INF&&pow(x)<=0).map(x=>[q,x]));if(!L.length)break;for(const [q,x] of L)log(`『${nameOf(x)}』はパワーが0以下なので破壊される`);const before=L.map(([q,x])=>x);await massDestroy(L);if(before.every(x=>G.p[x.owner].bz.includes(x))&&k>0)break;}}finally{G.zcBusy=false;}
+  try{for(let k=0;k<20&&!G.over;k++){const L=[0,1].flatMap(q=>G.p[q].bz.filter(x=>D(x).type==='c'&&((x.zeroT===G.turnNo)||(pow(x)!==INF&&pow(x)<=0))).map(x=>[q,x]));if(!L.length)break;for(const [q,x] of L)log(`『${nameOf(x)}』はパワーが0以下なので破壊される`);const before=L.map(([q,x])=>x);await massDestroy(L);if(before.every(x=>G.p[x.owner].bz.includes(x))&&k>0)break;}}finally{G.zcBusy=false;}
 }
 function setU(c,k,pi){c.u=c.u||{};c.u[k]=pi;}
 async function chooseOpp(pi,title,f,cpuPick,cancel){
@@ -8606,7 +8608,7 @@ async function abyssMek(pi){
 }
 DEFS.c659={name:'邪闘 シス',civ:['闇'],cost:6,power:9000,type:'c',race:['アビスキマイラ'],kw:['wbreaker'],abyssRush:true,
   txt:[ABR,'W・ブレイカー','このクリーチャーが出た時、相手のクリーチャーを1体選ぶ。このターン、そのクリーチャーのパワーを-∞する。（パワー0以下のクリーチャーは破壊される）','このクリーチャーが攻撃する時、アビス・W・メクレイド5してもよい。（自分の山札の上から6枚を見る。その中から指定の種族で指定のコスト以下のカードを2枚まで、コストを支払わずに実行してもよい。残りを好きな順序で山札の下に置く）'],
-  async onEnter(pi){const t=await chooseOpp(pi,'パワーを-∞する相手のクリーチャー');if(!t)return;if(pow(t)===INF){log(`『${nameOf(t)}』のパワーは∞なので、-∞の結果は0として破壊される`);await destroy(t.owner,t);return;}t.pm=(t.pm||0)-1e12;log(`『${nameOf(t)}』のパワーを-∞した`);await destroy(t.owner,t);},
+  async onEnter(pi){const t=await chooseOpp(pi,'パワーを-∞する相手のクリーチャー');if(!t)return;if(pow(t)===INF)log(`『${nameOf(t)}』のパワーは∞なので、-∞の結果は0として扱う`);else log(`『${nameOf(t)}』のパワーを-∞した`);t.pm=(t.pm||0)-1e12;t.zeroT=G.turnNo;await zeroCheck();},
   async onAttack(pi,c){if(await askYN(pi,'アビス・W・メクレイド5しますか？',c,true))await abyssMek(pi);}};
 
 DEFS.c660={name:'アビスベル=覇=ロード',civ:['闇','自然'],cost:7,power:11000,type:'c',race:['アビスロイヤル'],kw:['wbreaker'],firstAtkMe:true,
@@ -8904,8 +8906,8 @@ DEFS.c698={name:'青銅のバンビシカット',civ:['自然'],cost:2,power:100
 DEFS.c699={name:'「正義星帝」＜ライオネル.Star＞',civ:['光'],cost:5,power:9500,type:'c',race:['メタリカ','エンジェル・コマンド','レクスターズ'],kw:['wbreaker'],star:true,
   evo:{kind:'one',test:x=>hasR(x,'レクスターズ')||civOf(x).includes('光'),label:'レクスターズまたは光のクリーチャー'},
   txt:['スター進化：レクスターズまたは光の、クリーチャー1体の上に置く。（このクリーチャーが離れる時、かわりに一番上のカードが離れる）','W・ブレイカー','このクリーチャーが出た時、カードを1枚引く。その後、光のタマシードを1つ、自分の手札から出してもよい。','各ターンに1度、自分のタマシードが出た時、コスト6以下の進化クリーチャーを1体、自分の手札から出してもよい。'],
-  async onEnter(pi){await draw(pi,1);if(G.over)return;const x=await choose(pi,'手札から出す光のタマシード',G.p[pi].hand.filter(h=>DEFS[h.id].type==='t'&&civOf(h).includes('光')),bigPick,true);if(x)await putFrom(pi,x,'hand');},
-  async onMyEnter(pi,c,x){if(D(x).type!=='t'||c.lnT===G.turnNo)return;const P=G.p[pi];const L=P.hand.filter(h=>DEFS[h.id].type==='c'&&DEFS[h.id].evo&&DEFS[h.id].evo.kind==='one'&&cc(h)<=6&&!putBlocked(pi,h)&&evoFeasible(pi,h));const h=await choose(pi,'ライオネル.Star：手札から出すコスト6以下の進化クリーチャー',L,bigPick,true);if(!h)return;c.lnT=G.turnNo;const src=await chooseSources(pi,h);if(!src||!P.hand.includes(h))return;zoneRemove(pi,h,'hand');await evolveInto(pi,plain(h),src,{summon:false});}};
+  async onEnter(pi){await draw(pi,1);if(G.over)return;const x=await choose(pi,'手札から出す光のタマシード',G.p[pi].hand.filter(h=>isTama(h)&&civOf(h).includes('光')),bigPick,true);if(x)await putFrom(pi,x,'hand');},
+  async onMyEnter(pi,c,x){if(!isTama(x)||c.lnT===G.turnNo)return;const P=G.p[pi];const L=P.hand.filter(h=>DEFS[h.id].type==='c'&&DEFS[h.id].evo&&DEFS[h.id].evo.kind==='one'&&cc(h)<=6&&!putBlocked(pi,h)&&evoFeasible(pi,h));const h=await choose(pi,'ライオネル.Star：手札から出すコスト6以下の進化クリーチャー',L,bigPick,true);if(!h)return;c.lnT=G.turnNo;const src=await chooseSources(pi,h);if(!src||!P.hand.includes(h))return;zoneRemove(pi,h,'hand');await evolveInto(pi,plain(h),src,{summon:false});}};
 
 DEFS.c700={name:'剛撃聖霊シェバ・エリクシア',civ:['光','自然'],cost:8,power:18000,type:'c',race:['ジャイアント','エンジェル・コマンド'],kw:['blocker','qbreaker'],shebaLock:true,
   txt:['ブロッカー','Q・ブレイカー','このクリーチャーが出た時、コストの合計が7以下になるように、クリーチャーを2体まで自分のマナゾーンから出す。','パラバラエティ5：自分のクリーチャーは、破壊以外の方法で離れない。（コストが異なる自分のエレメントが5つ以上あれば、このクリーチャーにこの能力を与える）'],
@@ -9122,7 +9124,7 @@ DEFS.c737={name:'熱き侵略 レッドゾーンZ',civ:['火'],cost:6,power:1100
 DEFS.c738={name:'MMM-ジョーキング',civ:['光','自然'],cost:5,power:6000,type:'c',race:['ジョーカーズ・ドラゴン','レクスターズ'],kw:['blocker','mach','wbreaker'],
   txt:['相手のクリーチャーが自分を攻撃する時、自分のシールドが1つもなく、自分のマナゾーンに光と自然文明があれば、このクリーチャーを自分の手札から出してもよい。','ブロッカー','マッハファイター','W・ブレイカー','このクリーチャーが攻撃する時、カードを1枚引く。その後、コスト4以下の、クリーチャーまたはタマシードを1つ、自分の手札から出してもよい。'],
   async handOppAttack(pi,h,a,t){const P=G.p[pi];if(t.kind==='creature'||P.shields.length||putBlocked(pi,h))return;const mc=new Set();P.mana.forEach(m=>mCiv(m).forEach(v=>mc.add(v)));if(!mc.has('光')||!mc.has('自然'))return;if(!await askYN(pi,'MMM-ジョーキング：手札から出しますか？',h,true))return;await putFrom(pi,h,'hand');},
-  async onAttack(pi){await draw(pi,1);if(G.over)return;const L=G.p[pi].hand.filter(h=>cc(h)<=4&&((DEFS[h.id].type==='c'&&nonEvo(h))||DEFS[h.id].type==='t')&&!putBlocked(pi,h));const x=await choose(pi,'手札から出すコスト4以下のクリーチャーまたはタマシード',L,bigPick,true);if(x)await putFrom(pi,x,'hand');}};
+  async onAttack(pi){await draw(pi,1);if(G.over)return;const L=G.p[pi].hand.filter(h=>cc(h)<=4&&((DEFS[h.id].type==='c'&&nonEvo(h))||isTama(h))&&!putBlocked(pi,h));const x=await choose(pi,'手札から出すコスト4以下のクリーチャーまたはタマシード',L,bigPick,true);if(x)await putFrom(pi,x,'hand');}};
 
 DEFS.c739={name:'天風のゲイル・ヴェスパー',civ:['自然'],cost:10,power:12000,type:'c',race:['グランセクト'],kw:['tbreaker'],grantGale:true,sympMin:1,
   symp:pi=>2*G.p[pi].bz.filter(x=>D(x).type==='c'&&pow(x)>=12000).length,
@@ -9159,7 +9161,7 @@ DEFS.c744={name:'五輪の求道者 清永',civ:['水','自然'],cost:6,power:85
     if(diff){while(!G.over){const c=L.filter(x=>!used.includes(x)&&DEFS[x.id].type!=='s'&&DEFS[x.id].cost<=9&&(DEFS[x.id].type==='t'||(nonEvo(x)&&!putBlocked(pi,x))));const p=await pickZ(pi,'コストを支払わずに実行するコスト9以下のエレメント',c.map(card=>({card,z:'reveal'})),bigPick,true);if(!p)break;used.push(p.card);await playFreeAny(pi,p.card,'deckfx',dd=>dd.cost<=9);}}
     for(const x of L.filter(y=>!used.includes(y))){if(G.over)return;await putMana(pi,x);}render();}};
 
-const heraOK=c=>myElemsAll(c.owner).filter(x=>civOf(x).includes('自然')).length>=4;
+const heraOK=c=>myElemsAll(c.owner).filter(x=>crOrTama(x)&&civOf(x).includes('自然')).length>=4;
 DEFS.c745={name:'環嵐!ホールインワン・ヘラクレス',civ:['自然'],cost:4,power:12000,type:'c',race:['ジャイアント・インセクト','ACE'],kw:['tbreaker'],gyaiaMana:true,tsCr:true,
   canAtkIf:c=>heraOK(c),
   txt:['タマシード/クリーチャー','T・ブレイカー','このタマシードが出た時、プレイヤーを1人選ぶ。そのプレイヤーは自身の墓地をシャッフルし、山札の下に置く。','自分のターン中、クリーチャーを1体、自分のマナゾーンから召喚してもよい。','自分の自然の、クリーチャーまたはタマシードが合計4つ以上なければ、バトルゾーンにあるこのタマシードはクリーチャーとして扱わない。','このクリーチャーが攻撃する時、相手のクリーチャーを1体選び、持ち主のマナゾーンに置く。その後、自分の山札の上から2枚までマナゾーンに置く。'],
@@ -9791,12 +9793,12 @@ DEFS.c1001={name:'フットレス＝トレース',civ:['闇'],cost:4,power:4000,
     async onCast(pi){await mekuraid(pi,5,x=>hasR(x,'アビス'),'アビス・メクレイド');}},
   txt:['ブロッカー','自分のターンの終わりに、自分の山札の上から1枚を墓地に置く。その後、闇のカードを1枚、自分の墓地から手札に戻してもよい。'],
   async endFx(pi){await mill(pi,1);if(!G.over)await graveToHand(pi,x=>civOf(x).includes('闇'),'墓地から手札に戻す闇のカード');}};
-const aqCount=pi=>myElemsAll(pi).filter(x=>civOf(x).includes('水')).length;
+const aqCount=pi=>myElemsAll(pi).filter(x=>crOrTama(x)&&civOf(x).includes('水')).length;
 DEFS.c1002={name:'AQ NETWORK',civ:['水'],cost:5,power:5000,type:'c',race:['マジック・リキッド・ピープル'],st:true,
   grant:{blocker:(x,c)=>c===x&&aqCount(x.owner)>=3},
   async graveRepl(pi,c,o){return o&&o.destroy&&aqCount(pi)>=3?'hand':null;},
   txt:['S・トリガー','このクリーチャーが出た時、コスト5以下の、タマシードまたは呪文を1つ、自分の手札からコストを支払わずに実行してもよい。','シビルカウント3：自分の水の、クリーチャーまたはタマシードが合計3つ以上あれば、このクリーチャーに「ブロッカー」を与え、破壊される時、かわりに手札に戻す。'],
-  async onEnter(pi){const L=G.p[pi].hand.filter(x=>{const d=DEFS[x.id];const ok=e=>e&&(e.type==='t'||e.type==='s')&&e.cost<=5&&(e.type!=='s'||!spellBanned(pi,e));return ok(d)||ok(d.side);});const x=await choose(pi,'コストを支払わずに実行するコスト5以下のタマシードか呪文',L,bigPick,true);if(x)await playFreeAny(pi,x,'hand',e=>(e.type==='t'||e.type==='s')&&e.cost<=5);}};
+  async onEnter(pi){const L=G.p[pi].hand.filter(x=>{const d=DEFS[x.id];const ok=e=>e&&((e.type==='t'&&!e.field)||e.type==='s')&&e.cost<=5&&(e.type!=='s'||!spellBanned(pi,e));return ok(d)||ok(d.side);});const x=await choose(pi,'コストを支払わずに実行するコスト5以下のタマシードか呪文',L,bigPick,true);if(x)await playFreeAny(pi,x,'hand',e=>(e.type==='t'||e.type==='s')&&e.cost<=5);}};
 DEFS.c1003={name:'セイレーン・コンチェルト',civ:['水'],cost:1,type:'s',race:[],st:true,txt:['S・トリガー','カードを1枚、自分のマナゾーンから手札に戻す。その後、自分の手札を1枚マナゾーンに置く。'],
   async onCast(pi){const P=G.p[pi];const x=await choose(pi,'マナゾーンから手札に戻すカード',P.mana.map(m=>m.card),bestRecover);if(x)toHandFrom(pi,x,'mana');const y=await choose(pi,'マナゾーンに置く手札',P.hand,cpuDiscardPick);if(y){zoneRemove(pi,y,'hand');await putMana(pi,y);}}};
 DEFS.c1004={name:'ジョーカーズの心絵',civ:['光'],cost:8,type:'t',race:['ジョーカーズ','レクスターズ'],shinka:true,
@@ -10083,6 +10085,7 @@ DEFS.c266.civ=['光', '闇', '自然'];
 DEFS.c284.civ=['光', '火'];
 DEFS.c285.civ=['無'];
 DEFS.c270.side.civ=['闇','火'];DEFS.c284.side.civ=['光','火'];DEFS.c508.side.civ=['光','水'];
+DEFS.c717.civ=['火'];DEFS.c717.side.civ=['光','自然'];
 UI.offCache={};
 
 /* ===== オンライン通信（共有データベース） ===== */
@@ -10490,15 +10493,15 @@ function gridInner(){
 function deckStats(){
   const ids=CARD_IDS.filter(id=>UI.myDeck[id]);
   const n=deckTotal();
-  const curve=[0,0,0,0,0,0,0,0];let cr=0,sp=0,ts=0,tw=0,st=0;const civ={};
+  const curve=[0,0,0,0,0,0,0,0];let cr=0,sp=0,ts=0,tw=0,st=0,fd=0,ca=0;const civ={};
   ids.forEach(id=>{const k=UI.myDeck[id],d=DEFS[id],v=dCost(id);curve[Math.min(7,Math.max(0,v-1))]+=k;
-    const ct=catOf(id);if(ct==='c')cr+=k;else if(ct==='t')ts+=k;else if(ct==='tw')tw+=k;else sp+=k;
+    const ct=catOf(id);if(ct==='c')cr+=k;else if(ct==='t')ts+=k;else if(ct==='tw')tw+=k;else if(ct==='f'||ct==='xg')fd+=k;else if(ct==='castle')ca+=k;else sp+=k;
     if(d.st||d.superST||(d.side&&d.side.st))st+=k;
     civOf({id}).forEach(v=>civ[v]=(civ[v]||0)+k);});
   const mx=Math.max(1,...curve);
   const bars=curve.map((v,i)=>`<div class="cb"><span class="cbn">${v||''}</span><div class="cbb" style="height:${Math.round(v/mx*64)}px"></div><span class="cbl">${i===7?'8+':i+1}</span></div>`).join('');
   const civs=CIV_ORDER.filter(v=>civ[v]).map(v=>`<span class="cvc" style="--civ:${CIVC[v]}">${v} ${civ[v]}</span>`).join('');
-  return `<div class="dstat"><div class="curve">${bars}</div><div class="dsum"><span>クリーチャー ${cr}</span><span>呪文 ${sp}</span><span>タマシード ${ts}</span><span>ツインパクト ${tw}</span><span>S・トリガー系 ${st}</span></div><div class="dciv">${civs||'<span class="note">まだカードがありません</span>'}</div></div>`;
+  return `<div class="dstat"><div class="curve">${bars}</div><div class="dsum"><span>クリーチャー ${cr}</span><span>呪文 ${sp}</span><span>タマシード ${ts}</span><span>ツインパクト ${tw}</span>${fd?`<span>フィールド・クロスギア ${fd}</span>`:''}${ca?`<span>城 ${ca}</span>`:''}<span>S・トリガー系 ${st}</span></div><div class="dciv">${civs||'<span class="note">まだカードがありません</span>'}</div></div>`;
 }
 function deckListView(){
   const ids=deckSort(CARD_IDS.filter(id=>UI.myDeck[id]));
@@ -10558,7 +10561,7 @@ function sheetHTML(){
   else{
     const f=findCard(s.uid);if(!f){UI.sheet=null;return '';}
     inst=f.inst;id=inst.id;
-    if(f.zone==='ts')info=`<div class="now">タマシード（エレメント）${sasaOf(inst)?`／ササゲール${sasaOf(inst)}`:''}${isLinked(inst)?`／G・リンク中（${linkMembers(inst).map(x=>nameOf(x)).join('＋')}）`:''}${sealN(inst)?`／封印${sealN(inst)}つ`:''}${ignored(inst)?'／能力は無視されています':''}</div>`;
+    if(f.zone==='ts')info=`<div class="now">${D(inst).field||'タマシード'}（エレメント）${sasaOf(inst)?`／ササゲール${sasaOf(inst)}`:''}${isLinked(inst)?`／G・リンク中（${linkMembers(inst).map(x=>nameOf(x)).join('＋')}）`:''}${sealN(inst)?`／封印${sealN(inst)}つ`:''}${ignored(inst)?'／能力は無視されています':''}</div>`;
     if(f.zone==='shield')info=`<div class="now">表向きのシールド</div>`;
     if(f.zone==='bz')info=`<div class="now">現在のパワー ${powTxt(pow(inst))}${inst.under&&inst.under.length?`／下に${inst.under.length}枚`:''}${inst.pile&&inst.pile.length?`／下のカード${inst.pile.length}枚`:''}${inst.sick?'／召喚酔い':''}${inst.tapped?'／タップ':''}${inst.dive?'／ジャストダイバー中':''}${hasU(inst,'noAtk')?'／攻撃できない':''}${hasU(inst,'noBlock')?'／ブロックできない':''}${hasU(inst,'noUntap')?'／アンタップしない':''}${hasU(inst,'noDieBattle')?'／バトル中破壊されない':''}${sasaOf(inst)?`／ササゲール${sasaOf(inst)}`:''}${ignored(inst)?'／能力は無視されています':''}</div>`;
     if(f.pi===ME&&myTurnOK()){
