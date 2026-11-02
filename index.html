@@ -242,6 +242,15 @@ button.big{font-size:18px;padding:14px 22px;margin-top:6px}
 .dkinfo{font-size:13px}
 .dkinfo .note{margin:4px 0 6px;line-height:1.5}
 .dkinfo button{font-size:13px}
+.shbox{margin:10px 0 14px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);text-align:left}
+.shbox>b{display:block;margin-bottom:4px}
+.shbox .note{margin:4px 0 8px;line-height:1.5}
+.shlist{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.shrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line)}
+.shn{flex:1 1 140px;min-width:0}
+.shn b{display:block;overflow-wrap:anywhere}
+.shn small{color:var(--muted)}
+.shrow button{font-size:13px}
 
 </style>
 </head>
@@ -10234,6 +10243,97 @@ function sendAns(o){
   NET.ansChain=NET.ansChain.then(()=>gdoc('-ans').set(o)).catch(e=>netErr('通信エラー（回答の送信）：'+((e&&(e.code||e.message))||'')));
 }
 
+
+/* ===== みんなのデッキ（共有デッキ・オンライン保存） =====
+   Firestore の games/SHARED-DECKS に保存。アプリを更新しても消えず、
+   「みんなのデッキから削除」を押したときだけ消える。
+   カードはIDと名前の両方で保存し、将来IDが変わっても名前で復元する。 */
+const SHARE={on:false,decks:{},unsub:null,err:'',delArm:null,busy:false};
+function shareRef(){return firebase.firestore().doc('games/SHARED-DECKS');}
+function shareStart(){
+  if(SHARE.unsub||!NET.db||typeof firebase==='undefined')return;
+  try{
+    SHARE.unsub=shareRef().onSnapshot(sn=>{const d=sn.exists?sn.data():null;SHARE.decks=(d&&d.decks)||{};SHARE.on=true;SHARE.err='';if(typeof render==='function'&&!(G&&UI.screen==='game'))render();},
+      e=>{SHARE.err='みんなのデッキを読み込めませんでした（'+((e&&e.code)||'通信エラー')+'）';render();});
+  }catch(e){SHARE.err='みんなのデッキを読み込めませんでした';}
+}
+{const _ni=netInit;netInit=async function(){await _ni();shareStart();};}
+/* 共有デッキ → この端末のカードIDに直す */
+function shareResolve(sd){
+  const cards={};let miss=0;
+  for(const [id,n] of Object.entries(sd.cards||{})){
+    let use=null;const nm=(sd.names||{})[id];
+    if(DEFS[id]&&(!nm||DEFS[id].name===nm))use=id;else if(nm)use=dkFind(nm);
+    if(use&&DEFS[use]){const lim=DEFS[use].anyNum?99:4;cards[use]=Math.min(lim,(cards[use]||0)+(+n||0));}else miss+=(+n||0);
+  }
+  return {cards,miss};
+}
+function shareIds(sid){const sd=SHARE.decks[sid];if(!sd)return null;const {cards}=shareResolve(sd);const ids=[];CARD_IDS.forEach(id=>{for(let i=0;i<(cards[id]||0);i++)ids.push(id);});return ids;}
+function shareList(){return Object.entries(SHARE.decks).filter(([k,d])=>d&&d.cards).sort((a,b)=>(b[1].t||0)-(a[1].t||0));}
+function newSid(){return 'd'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+async function shareUpload(sid,name,cardsObj){
+  const names={};Object.keys(cardsObj).forEach(id=>{if(DEFS[id])names[id]=DEFS[id].name;});
+  await shareRef().set({decks:{[sid]:{name:String(name||'デッキ').slice(0,20),cards:Object.assign({},cardsObj),names,t:Date.now()}}},{merge:true});
+}
+/* 今のデッキを、みんなのデッキに保存（すでに共有済みなら上書き） */
+async function shareCurrent(){
+  if(!SHARE.on||SHARE.busy)return;
+  saveDeck();const d=UI.decks[UI.dcur];if(!d.sid)d.sid=newSid();saveDeck();
+  SHARE.busy=true;render();
+  try{await shareUpload(d.sid,d.name,d.cards);SHARE.err='';}catch(e){SHARE.err='保存できませんでした（'+((e&&e.code)||'通信エラー')+'）';}
+  SHARE.busy=false;render();
+}
+/* 共有済みのデッキは、編集したら自動でみんなのデッキも更新 */
+let shareT=null;
+{const _sd=saveDeck;saveDeck=function(){_sd();const d=UI.decks&&UI.decks[UI.dcur];if(!d||!d.sid||!SHARE.on||!SHARE.decks[d.sid])return;clearTimeout(shareT);const sid=d.sid,name=d.name,cards=Object.assign({},d.cards);shareT=setTimeout(()=>{shareUpload(sid,name,cards).catch(()=>{});},1200);};}
+/* 端末のデッキ一覧で sid（共有ID）を消さずに読み込む */
+{const _ld=loadDeck;loadDeck=function(){_ld();try{const o=JSON.parse(localStorage.getItem(DECKS_KEY)||'{}');if(o&&Array.isArray(o.decks))o.decks.forEach((d,i)=>{if(UI.decks[i]&&d&&d.sid)UI.decks[i].sid=d.sid;});}catch(e){}};}
+/* 何枚でも入れられるカード（ハチ公など）が4枚に切られないように */
+cleanCards=function(o){const c={};CARD_IDS.forEach(id=>{const n=+(o&&o[id])||0;if(n>0)c[id]=Math.min(DEFS[id].anyNum?99:4,n);});return c;};
+/* みんなのデッキを、自分の端末のデッキに取り込む */
+function shareImport(sid){
+  const sd=SHARE.decks[sid];if(!sd)return;
+  const {cards}=shareResolve(sd);
+  const i=UI.decks.findIndex(d=>d.sid===sid);
+  if(i>=0){selectDeck(i);UI.myDeck=Object.assign({},cards);UI.decks[i].name=String(sd.name).slice(0,20);saveDeck();render();return;}
+  if(UI.decks.length>=MAX_DECKS){alert('自分のデッキがいっぱいです（12個まで）。どれかを削除してから試してください。');return;}
+  saveDeck();UI.decks.push({name:String(sd.name).slice(0,20),cards,sid});UI.dcur=UI.decks.length-1;UI.myDeck=Object.assign({},cards);saveDeck();render();
+}
+async function shareDelete(sid){
+  if(SHARE.delArm!==sid){SHARE.delArm=sid;render();return;}
+  SHARE.delArm=null;
+  try{await shareRef().update({['decks.'+sid]:firebase.firestore.FieldValue.delete()});
+    (UI.decks||[]).forEach(d=>{if(d.sid===sid)delete d.sid;});saveDeck();
+  }catch(e){SHARE.err='削除できませんでした（'+((e&&e.code)||'通信エラー')+'）';}
+  render();
+}
+function shareCount(sd){return Object.values(sd.cards||{}).reduce((a,b)=>a+(+b||0),0);}
+function sharePanelHTML(){
+  const d=UI.decks[UI.dcur];const shared=!!(d.sid&&SHARE.decks[d.sid]);
+  if(!SHARE.on)return `<div class="shbox"><b>みんなのデッキ（共有）</b><p class="note">${SHARE.err?esc(SHARE.err):(NET.db===null?'このページではオンライン保存が使えません（GitHub Pagesのページで開いてください）':'読み込み中…')}</p></div>`;
+  const list=shareList().map(([sid,sd])=>{const n=shareCount(sd);const mine=d.sid===sid;
+    return `<div class="shrow"><div class="shn"><b>${esc(sd.name)}</b><small>${n}枚${mine?'・いま編集中のデッキ':''}</small></div>
+      <button onclick="shareImport('${sid}')">${(UI.decks||[]).some(x=>x.sid===sid)?'最新にする':'自分のデッキに入れる'}</button>
+      <button class="ghost dclr" onclick="shareDelete('${sid}')">${SHARE.delArm===sid?'もう一度押すと削除':'削除'}</button></div>`;}).join('')||'<p class="note">まだ共有されたデッキはありません</p>';
+  return `<div class="shbox"><b>みんなのデッキ（共有）</b>
+    <p class="note">ここに保存したデッキは、このURLを開いた全員が見て使えます。アプリを更新しても消えず、「削除」を押したときだけ消えます。</p>
+    <button class="primary" onclick="shareCurrent()" ${SHARE.busy?'disabled':''}>${shared?'みんなのデッキに上書き保存':'このデッキをみんなのデッキに保存'}</button>
+    ${shared?'<p class="note">このデッキは共有中です。編集すると、みんなのデッキも自動で更新されます。</p>':''}
+    ${SHARE.err?`<p class="warn">${esc(SHARE.err)}</p>`:''}
+    <div class="shlist">${list}</div></div>`;
+}
+{const _dh=deckHTML;deckHTML=function(){const h=_dh();const k=h.indexOf('<div class="dhead">');return k<0?h+sharePanelHTML():h.slice(0,k)+sharePanelHTML()+h.slice(k);};}
+/* トップ画面のデッキ選択に「みんなのデッキ」を追加 */
+{const _sel=selIds;selIds=function(v){if(v&&v.startsWith('sh:')){const ids=shareIds(v.slice(3));return ids&&validIds(ids)?ids:null;}return _sel(v);};}
+{const _my=myDeckIds;myDeckIds=function(){if(UI.pSel&&UI.pSel.startsWith('sh:')){const ids=shareIds(UI.pSel.slice(3));if(ids)return ids;}return _my();};}
+{const _ds=deckSelectHTML;deckSelectHTML=function(){
+  let h=_ds();if(!SHARE.on)return h;
+  const L=shareList();if(!L.length)return h;
+  const opt=pre=>L.map(([sid,sd])=>{const ids=shareIds(sid);const ok=ids&&validIds(ids);const v='sh:'+sid;const cur=pre==='p'?UI.pSel:UI.cpuSel;return `<option value="${v}" ${cur===v?'selected':''} ${ok?'':'disabled'}>みんなのデッキ：${esc(sd.name)}${ok?'':`（${ids?ids.length:0}枚）`}</option>`;}).join('');
+  const sels=h.split('</select>');
+  if(sels.length>=3){sels[0]+=`<optgroup label="みんなのデッキ">${opt('p')}</optgroup>`;sels[1]+=`<optgroup label="みんなのデッキ">${opt('c')}</optgroup>`;h=sels.join('</select>');}
+  return h;};}
+{const _di=deckInfo;deckInfo=function(){const h=_di();if(UI.pSel&&UI.pSel.startsWith('sh:'))return h.replace(/<div class="deckbox2">[\s\S]*$/,'');return h;};}
 
 /* ===== 画面 ===== */
 function findCard(uid){
