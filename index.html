@@ -253,6 +253,25 @@ button.big{font-size:18px;padding:14px 22px;margin-top:6px}
 .shn b{display:block;overflow-wrap:anywhere}
 .shn small{color:var(--muted)}
 .shrow button{font-size:13px}
+/* トップメニュー */
+.mhome h1{margin-bottom:4px}
+.mtiles{display:grid;grid-template-columns:1fr;gap:12px;margin:14px 0 10px;text-align:left}
+@media (min-width:640px){.mtiles{grid-template-columns:1fr 1fr}}
+.mtile{display:flex;align-items:center;gap:14px;padding:18px 16px;border-radius:16px;border:1px solid var(--line);background:var(--panel);color:var(--ink);text-align:left;width:100%;min-height:84px;box-shadow:0 2px 0 var(--line)}
+.mtile:active{transform:translateY(1px);box-shadow:none}
+.mtile .mi{flex:0 0 52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;background:var(--panel2)}
+.mtile.t1 .mi{background:var(--btn);color:var(--btnink)}
+.mtile .mt{display:flex;flex-direction:column;gap:3px}
+.mtile .mt b{font-size:19px}
+.mtile .mt small{color:var(--muted);font-size:13px;line-height:1.4}
+.mtile.t1{border-color:var(--btn);border-width:2px}
+.mnow{font-size:13px;color:var(--muted);margin:6px 0}
+.mnow b{color:var(--ink)}
+.mscr{text-align:left}
+.mback{background:none;border:none;color:var(--accent);padding:6px 0;font-size:15px;box-shadow:none}
+.mh{font-size:22px;margin:6px 0 4px}
+.msub{color:var(--muted);font-size:13px;margin:0 0 12px;line-height:1.5}
+.mstart{display:block;margin:14px auto 6px;width:100%;max-width:420px}
 
 </style>
 </head>
@@ -10952,6 +10971,47 @@ if(typeof document!=='undefined'&&document.addEventListener){
   });
   render();netInit();
 }
+
+/* ===== トップ画面（メニュー） ===== */
+function menuGo(m){UI.menu=m||null;render();window.scrollTo(0,0);}
+function menuBack(){return `<button class="mback" onclick="menuGo(null)">← メニューにもどる</button>`;}
+function menuDeckLine(){
+  let nm,ok;
+  if(UI.pSel&&UI.pSel.startsWith('o:')){nm='おすすめ：'+OFFICIAL_DECKS[+UI.pSel.slice(2)].n;ok=true;}
+  else if(UI.pSel&&UI.pSel.startsWith('sh:')){const sd=SHARE.decks[UI.pSel.slice(3)];nm='みんなのデッキ：'+(sd?sd.name:'');ok=validIds(myDeckIds());}
+  else{if(!UI.myDeck)loadDeck();nm='マイデッキ：'+UI.decks[UI.dcur].name;ok=deckTotal()===DECK_SIZE;}
+  return `<p class="mnow">いま使うデッキ：<b>${esc(nm)}</b>${ok?'':'<span class="warn">（40枚になっていません）</span>'}</p>`;
+}
+const menuDeck=()=>deckInfo().replace('マイデッキ（下で選んだもの）','マイデッキ（すぐ下のボタンで選ぶ）').replace('<b>使うデッキ</b><span class="note">タップで切りかえ</span>','<b>マイデッキ</b><span class="note">押して切りかえ</span>');
+titleHTML=function(){
+  const m=UI.menu;
+  if(m==='cpu'){
+    const ok=validIds(myDeckIds());
+    return `<div class="title mscr">${menuBack()}<h2 class="mh">CPUと対戦</h2>
+    <p class="msub">① 自分のデッキと、CPUのデッキを選ぶ　② 「対戦スタート」を押す</p>
+    ${menuDeck()}
+    <button class="primary big mstart" data-do="start" ${ok?'':'disabled'}>対戦スタート（あなたが先攻）</button>
+    ${ok?'':'<p class="warn">デッキが40枚になっていないので、まだ始められません。</p>'}</div>`;
+  }
+  if(m==='online'){
+    let deck=menuDeck().replace(/<label class="dkl"><b>CPUのデッキ<\/b>[\s\S]*?<\/label>/,'');
+    const on=onlineHTML().replace('デッキは上で選んだ内容が、2人とも同じになります。','自分が使うデッキは、上の「あなたのデッキ」で選んだものです。');
+    return `<div class="title mscr">${menuBack()}<h2 class="mh">友だちと対戦（オンライン）</h2>
+    <p class="msub">① 使うデッキを選ぶ　② 1人が「部屋をつくる」→ 出た合言葉を相手に伝える　③ 相手は合言葉を入れて「入る」</p>
+    ${deck}${on}</div>`;
+  }
+  return `<div class="title mhome"><h1>デュエル・マスターズ<br>シミュレーター</h1>
+  <p class="sub">遊びたいものを選んでください</p>
+  <div class="mtiles">
+    <button class="mtile t1" onclick="menuGo('cpu')"><span class="mi">⚔</span><span class="mt"><b>CPUと対戦</b><small>デッキを選んで、すぐに1人で遊べます</small></span></button>
+    <button class="mtile t2" onclick="menuGo('online')"><span class="mi">👥</span><span class="mt"><b>友だちと対戦</b><small>合言葉で部屋をつくって、オンラインで対戦</small></span></button>
+    <button class="mtile t3" data-do="deckedit"><span class="mi">📒</span><span class="mt"><b>マイデッキ</b><small>デッキを作る・直す・みんなのデッキを見る</small></span></button>
+    <button class="mtile t4" data-do="rules"><span class="mi">？</span><span class="mt"><b>遊び方</b><small>ルールと操作の説明</small></span></button>
+  </div>
+  ${menuDeckLine()}
+  <p class="note">デュエル・マスターズのルールで遊ぶ、非公式のファンメイド対戦アプリです。収録カードは全${CARD_IDS.length}種。</p></div>`;
+};
+try{if((UI.screen==='title'||!UI.screen)&&!G)render();}catch(e){}
 
 </script>
 </body>
