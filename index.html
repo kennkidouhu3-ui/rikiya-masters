@@ -10203,6 +10203,8 @@ BS('c1111','大地の咆哮','自然',2,[STT,'自分のマナゾーンから、�
 /* クリーチャーを攻撃できない */
 {const _am=atkMode;atkMode=function(c){const m=_am(c);if(m&&!ignored(c)&&D(c).noAtkCr){if(m==='creature')return '';return 'player';}return m;};}
 
+/* 巨大設計図はコスト2 */
+DEFS.c998.cost=2;
 UI.offCache={};
 CARD_IDS=Object.keys(DEFS).filter(k=>!DEFS[k].gr&&!DEFS[k].hidden).sort((a,b)=>+a.slice(1)-+b.slice(1));
 
