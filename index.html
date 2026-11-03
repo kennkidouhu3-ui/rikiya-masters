@@ -10716,9 +10716,17 @@ function optFace(card){
   const d=DEFS[card.id],civs=civOf(card);
   return `<span class="mini2" style="--civ:${CIVC[civs[0]]};--g:${civGrad(civs)}"><i>${costTxt(d.cost)}</i></span>`;
 }
+function optDetailHTML(m){
+  const o=m.options[m.peek],c=o.card,d=DEFS[c.id];
+  const body=(d.txt||[]).map(t=>`<p>${esc(t)}</p>`).join('')||'<p class="note">（能力なし）</p>';
+  const side=d.side?`<div class="twin"><b>ツインパクト：${esc(d.side.name)}</b><span>${d.side.civ.join('・')}文明 ／ コスト${costTxt(d.side.cost)} ／ 呪文${d.side.st?' ／ S・トリガー':''}</span>${(d.side.txt||[]).map(t=>`<p>${esc(t)}</p>`).join('')}</div>`:'';
+  let now='';try{if(c.owner!==undefined&&G&&G.p[c.owner]&&G.p[c.owner].bz.includes(c))now=`<div class="now">現在のパワー ${powTxt(pow(c))}${c.tapped?'／タップ':''}${(c.under||[]).length?`／下に${c.under.length}枚`:''}</div>`;}catch(e){}
+  return `<div class="ov top"><div class="sheet"><div class="mt">${esc(m.title)}</div>${bigFace(c.id,null)}${now}<div class="impl">${body}${side}</div><div class="acts"><button class="primary" data-do="optpick">このカードを選ぶ</button><button class="ghost" data-do="optback">一覧に戻る</button></div></div></div>`;
+}
 function modalHTML(){
   const m=UI.modal;
-  return `<div class="ov top"><div class="sheet"><div class="mt">${esc(m.title)}</div>${m.card&&DEFS[m.card.id]?bigFace(m.card.id,null):''}<div class="opts">${m.options.map((o,i)=>`<button class="opt" data-do="opt" data-i="${i}">${o.card&&DEFS[o.card.id]?optFace(o.card):''}<span>${esc(o.label!==undefined?o.label:String(o.value))}</span></button>`).join('')}</div></div></div>`;
+  if(m.peek!=null&&m.options[m.peek]&&m.options[m.peek].card&&DEFS[m.options[m.peek].card.id])return optDetailHTML(m);
+  return `<div class="ov top"><div class="sheet"><div class="mt">${esc(m.title)}</div>${m.card&&DEFS[m.card.id]?bigFace(m.card.id,null):''}${m.options.some(o=>o.card&&DEFS[o.card.id])?'<p class="hint">カードを押すと能力が見られます。そこから選んでください。</p>':''}<div class="opts">${m.options.map((o,i)=>`<button class="opt" data-do="opt" data-i="${i}">${o.card&&DEFS[o.card.id]?optFace(o.card):''}<span>${esc(o.label!==undefined?o.label:String(o.value))}</span></button>`).join('')}</div></div></div>`;
 }
 function manaSelHTML(){
   const M=UI.manaSel,d=DEFS[M.card.id],st=manaSelState();
@@ -10779,7 +10787,9 @@ if(typeof document!=='undefined'&&document.addEventListener){
     const actName=el.dataset.act,dd=el.dataset.do;
     if(actName==='view'){if(UI.modal||UI.manaSel)return;UI.sheet={uid:+el.dataset.uid};render();return;}
     if(actName==='cat'){UI.sheet={id:el.dataset.id};render();return;}
-    if(dd==='opt'){const m=UI.modal;if(!m)return;const v=m.options[+el.dataset.i].value;UI.modal=null;render();m.res(v);return;}
+    if(dd==='opt'){const m=UI.modal;if(!m)return;const i=+el.dataset.i,o=m.options[i];if(o&&o.card&&DEFS[o.card.id]){m.peek=i;render();return;}const v=o.value;UI.modal=null;render();m.res(v);return;}
+    if(dd==='optback'){const m=UI.modal;if(!m)return;m.peek=null;render();return;}
+    if(dd==='optpick'){const m=UI.modal;if(!m||m.peek==null)return;const v=m.options[m.peek].value;UI.modal=null;render();m.res(v);return;}
     if(dd==='deckedit'){if(!UI.myDeck)loadDeck();UI.screen='deck';UI.clearArm=false;UI.delArm=false;render();window.scrollTo(0,0);return;}
     if(dd==='deckdone'){UI.screen='title';render();return;}
     if(dd==='dadd'&&deckTotal()>=DECK_SIZE){UI.dfull=true;render();return;}
