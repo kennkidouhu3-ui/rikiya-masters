@@ -834,7 +834,23 @@ let ME=0;
 let NET={role:null,db:undefined,code:null,unsubs:[],err:'',canWrite:null,askBase:0,askN:0,actN:0,pend:null};
 let UI={screen:'title',sheet:null,modal:null,manaSel:null,result:null,resultHidden:false,log:false,rules:false,grave:null,deck:'all',dfilter:'all'};
 
-const D=c=>DEFS[c.id];
+const BRW_KEEP=new Set(['name','civ','cost','power','type','race','side','evo','smax','smaxAlt','star','powTag','anyNum','hidden','gr','neo','shinka','field','castle','dmrOne','fromMana','kirifuda','freeIf','freeLabel']);
+function brwDef(c,L){
+  const k=L.map(b=>b.id).join(',');if(c._bm&&c._bm.k===k&&c._bm.base===DEFS[c.id])return c._bm.d;
+  const base=DEFS[c.id],d=Object.assign({},base);d.kw=[...(base.kw||[])];d.txt=[...(base.txt||[])];
+  for(const b of L){const o=DEFS[b.id];if(!o)continue;
+    (o.kw||[]).forEach(k=>{if(!d.kw.includes(k))d.kw.push(k);});
+    (o.txt||[]).forEach(t=>d.txt.push('【'+o.name+'から】'+t));
+    if(o.grant){d.grant=Object.assign({},d.grant||{});for(const [g,f] of Object.entries(o.grant)){const f0=d.grant[g];d.grant[g]=f0?((x,y)=>f0(x,y)||f(x,y)):f;}}
+    for(const [key,v] of Object.entries(o)){if(BRW_KEEP.has(key)||key==='kw'||key==='txt'||key==='grant')continue;const v0=d[key];
+      if(typeof v==='function'&&typeof v0==='function'){
+        if(key==='powerPlus'||key==='auraPow'||key==='allRed'||key==='costRed')d[key]=(...a)=>(v0(...a)||0)+(v(...a)||0);
+        else d[key]=async function(...a){const r=await v0.apply(this,a);if(r)return r;return await v.apply(this,a);};
+      }else if(v0===undefined)d[key]=v;}
+  }
+  c._bm={k,base,d};return d;
+}
+const D=c=>{if(c&&c.brw&&c.brw.length&&G){const L=c.brw.filter(b=>G.turnNo<=b.until);if(L.length)return brwDef(c,L);}return DEFS[c.id];};
 const nameOf=c=>DEFS[c.id].name;
 function log(m){G.log.push(m);if(G.log.length>150)G.log.shift();}
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
@@ -861,7 +877,7 @@ const allBZ=()=>[...G.p[0].bz,...G.p[1].bz];
 const hasU=(c,k)=>!!c.u&&c.u[k]!==undefined;
 function targetable(pi){
   const sp=G.spellBy===pi,O=G.p[1-pi],ed=sp&&O.bz.some(t=>t.hyper&&D(t).hyper&&D(t).hyper.dragonSpellGuard&&!ignored(t));
-  const L=O.bz.filter(x=>!x.dive&&!(D(x).hexproof&&!ignored(x))&&!(sp&&(hasU(x,'noSpellTgt')||(D(x).spellHex&&!ignored(x))))&&!(ed&&isDragon(x)));
+  const L=O.bz.filter(x=>!(D(x).monoHex&&!ignored(x)&&(sp?!(G.spellDefCur&&(G.spellDefCur.civ||[]).length>1):!!(G.curSrc&&G.curSrc.owner===pi&&!isMultiCard(G.curSrc))))&&!x.dive&&!(D(x).hexproof&&!ignored(x))&&!(sp&&(hasU(x,'noSpellTgt')||(D(x).spellHex&&!ignored(x))))&&!(ed&&isDragon(x)));
   const t=L.filter(x=>D(x).taunt&&!ignored(x));
   return t.length?t:L;
 }
@@ -1102,6 +1118,7 @@ function spellBanned(pi,sd){
 }
 function putBlocked(pi,card){
   const d=D(card);
+  if(d.dmrOne&&G.p[pi].bz.some(x=>x.id===card.id&&x.uid!==card.uid))return true;
   if(d.type!=='c')return false;
   if(G.noSmall[pi]&&d.cost!==INF&&d.cost<=7)return true;
   if(G.putLim&&G.putLim.some(l=>l.t===pi&&(G.putN[pi]||0)>=l.n))return true;
@@ -1197,7 +1214,7 @@ function playOptions(pi,card,zone){
     const lab=d.type==='c'?(d.evo||d.neo?'進化・召喚する':'召喚する'):d.type==='t'?(d.field?(d.field+'を出す'):'タマシードを出す'):'呪文を唱える';
     out.push({key:'c',label:lab,why:castReason(pi,card,'c','hand')});
     if(d.side){const w=castReason(pi,card,'s','hand');out.push({key:'s',label:`ツインパクト「${d.side.name}」を唱える`,why:w});}
-    if(d.freeIf){out.push({key:'free',label:'G・ゼロ：コストを支払わずに実行',why:freeOK(pi,card)?'':'条件を満たしていません'});}
+    if(d.freeIf){out.push({key:'free',label:(d.freeLabel||'G・ゼロ')+'：コストを支払わずに実行',why:freeOK(pi,card)?'':'条件を満たしていません'});}
     if(d.mugen){out.push({key:'mugen',label:`ムゲンクライム${d.mugen.n}で出す`,why:mugenReason(pi,card,'hand')});}
     if(d.bad)out.push({key:'bad',label:`B・A・D${d.bad}：コストを${d.bad}少なく召喚（ターンの終わりに破壊）`,why:castReason(pi,card,'c','hand',d.bad)});
     const jn=joeN(pi,card);
@@ -1556,7 +1573,7 @@ async function putOnBZ(pi,card,o={}){
       let times=1;
       const sw=d.type==='c'?P.ts.find(x=>D(x).dswitch&&!x.flipped&&!ignored(x)):null;
       if(sw&&await askYN(pi,`Dスイッチ：『${nameOf(sw)}』を上下逆さまにして、『${d.name}』の「出た時」の能力を2回使いますか？（ゲーム中に1度だけ）`,c,cc(c)>=6)){sw.flipped=true;times=2;log('Dスイッチ！ 「出た時」の能力が2回使われる');}
-      for(let k=0;k<times&&!G.over&&inPlay(pi,c);k++)await D(c).onEnter(pi,c,ctx);
+      for(let k=0;k<times&&!G.over&&inPlay(pi,c);k++){const ps=G.curSrc;G.curSrc=c;try{await D(c).onEnter(pi,c,ctx);}finally{G.curSrc=ps;}}
     }
   }
   if(!o.noFx&&!G.over&&d.type==='c'){
@@ -1664,6 +1681,7 @@ async function leaveBZ(pi,c,dest,o={}){
   if(isCr&&D(c).loneStay&&!ignored(c)&&P.bz.length===1){log(`『${nameOf(c)}』は、自分のクリーチャーが自身だけなので離れない`);return false;}
   if(G.apoc&&G.apoc[pi]){log(`インビンシブル・アポカリプス：『${nameOf(c)}』は離れない`);return false;}
   if(D(c).noLeave&&!ignored(c)){log(`『${nameOf(c)}』は離れない`);return false;}
+  if(D(c).noLeaveIf&&!ignored(c)&&D(c).noLeaveIf(c)){log(`『${nameOf(c)}』は離れない`);return false;}
   if(isCr&&D(c).stayIf&&!ignored(c)&&D(c).stayIf(c)){log(`『${nameOf(c)}』はパワーが0より大きいので、とどまる`);return false;}
   if(isCr&&!o.destroy&&P.bz.some(x=>D(x).shebaLock&&!ignored(x)&&new Set([...P.bz,...P.ts].map(cc)).size>=5)){log(`シェバ・エリクシア：『${nameOf(c)}』は破壊以外の方法で離れない`);return false;}
   if(isCr&&P.shields.length>=7&&P.bz.some(x=>x.hyper&&D(x).hyper&&D(x).hyper.sh7&&!ignored(x))){log(`ハイパー・エン・ゲルス：シールドが7つ以上なので、『${nameOf(c)}』は離れない`);return false;}
@@ -2011,8 +2029,8 @@ async function runSpellFx(pi,d,o={}){
   if(momoOn()){log('モモムゲンの効果で、呪文の効果は無視された');return;}
   if(gemmuOn()&&d.cost!==INF&&d.cost<=5){log('ゲンムエンペラーの効果で、コスト5以下の呪文の効果は無視された');return;}
   if(!d.onCast)return;
-  const prev=G.spellBy;G.spellBy=pi;
-  try{await d.onCast(pi,{s:!!o.sFx,via:o.via||''});}finally{G.spellBy=prev;}
+  const prev=G.spellBy,prevD=G.spellDefCur;G.spellBy=pi;G.spellDefCur=d;
+  try{await d.onCast(pi,{s:!!o.sFx,via:o.via||''});}finally{G.spellBy=prev;G.spellDefCur=prevD;}
 }
 async function mySpellHooks(pi,card,d,from){
   const P=G.p[pi];
@@ -2200,6 +2218,7 @@ async function breakShields(ai,att){
 /* by側が、who のシールドを n 枚ブレイクする（src は原因のクリーチャー、なければ null） */
 async function breakSome(by,who,src,n,pick){
   const O=G.p[who];
+  if(G.shStay&&G.shStay.pi===who&&G.atkUid===G.shStay.uid){log('鬼タイム：攻撃中なので、シールドゾーンを離れない');return 0;}
   const broken=[];
   if(src&&src.owner!==who&&D(src).type==='c'){
     const sc=O.shields.find(s=>s.up&&DEFS[s.id].saint);
@@ -2396,15 +2415,16 @@ async function majiBomber(pi,c,n){
   const p=await pickZ(pi,`マジボンバー${n}：コスト${n}以下のクリーチャーを手札または山札の上から出す`,L,bigPick,true);
   if(p)await putFrom(pi,p.card,p.z);
 }
+function kfN(pi,h){const d=D(h);let n=d.kirifuda||0;for(const x of G.p[pi].bz){if(ignored(x)||!D(x).giveKirifuda)continue;const v=D(x).giveKirifuda(h);if(v&&(!n||v<n))n=v;}return n;}
 async function kirifudaCheck(ai,a){
   const P=G.p[ai];
   for(const h of [...P.hand]){
     if(G.over)return;
-    const d=D(h);if(!d.kirifuda||d.type!=='c'||!P.hand.includes(h)||putBlocked(ai,h))continue;
-    if(!canPay(ai,d.kirifuda,civsOf(d)))continue;
-    const yes=await askYN(ai,`キリフダッシュ${d.kirifuda}：『${d.name}』をマナ${d.kirifuda}で召喚しますか？`,h,true);
+    const d=D(h);const kn=kfN(ai,h);if(!kn||d.type!=='c'||!P.hand.includes(h)||putBlocked(ai,h))continue;
+    if(!canPay(ai,kn,civsOf(d)))continue;
+    const yes=await askYN(ai,`キリフダッシュ${kn}：『${d.name}』をマナ${kn}で召喚しますか？`,h,true);
     if(!yes)continue;
-    const sel=await pickMana(ai,h,d.kirifuda,civsOf(d));if(!sel)continue;
+    const sel=await pickMana(ai,h,kn,civsOf(d));if(!sel)continue;
     sel.forEach(m=>m.tapped=true);
     log('キリフダッシュ！');
     await playCard(ai,h,{free:true,from:'hand',face:'c',via:'kirifuda'});
@@ -2418,7 +2438,7 @@ async function attack(ai,a,t){
   try{
     await onTappedHook(ai,a);if(G.over||!P.bz.includes(a))return;
     /* 攻撃する時の能力：攻撃を宣言したクリーチャーのものだけがトリガーする（革命チェンジ・侵略などで後から出たクリーチャーの「攻撃する時」はトリガーしない） */
-    if(!ignored(a)&&D(a).onAttack){await D(a).onAttack(ai,a);if(G.over||!P.bz.includes(a))return;}
+    if(!ignored(a)&&D(a).onAttack){const ps=G.curSrc;G.curSrc=a;try{await D(a).onAttack(ai,a);}finally{G.curSrc=ps;}if(G.over||!P.bz.includes(a))return;}
     for(const x of linkMembers(a)){if(x===a||ignored(x)||!D(x).onAttack||!P.bz.includes(x))continue;await D(x).onAttack(ai,x);if(G.over||!P.bz.includes(a))return;}
     a=await tryRevChange(ai,a);G.atkUid=a.uid;
     if(G.over)return;
@@ -2750,7 +2770,7 @@ async function endTurn(pi,eo){
   if(!skipping){
   for(const x of [...P.bz]){
     if(G.over)return;
-    if(!P.bz.includes(x)||!(hasU(x,'mustAtk')||(D(x).mustAtk&&!ignored(x))||O.bz.some(y=>y.hyper&&D(y).hyper&&D(y).hyper.forceAtk&&!ignored(y)))||!canAtk(x))continue;
+    if(!P.bz.includes(x)||!(hasU(x,'mustAtk')||(D(x).mustAtk&&!ignored(x))||G.p.some(Q=>Q.bz.some(y=>D(y).allMustAtk&&!ignored(y)))||O.bz.some(y=>y.hyper&&D(y).hyper&&D(y).hyper.forceAtk&&!ignored(y)))||!canAtk(x))continue;
     const o=targetOptions(pi,x);if(!o.length)continue;
     log(`『${nameOf(x)}』は可能なら攻撃しなければならない`);
     let t=P.cpu?cpuTarget(pi,x):await ask(pi,`『${nameOf(x)}』は可能なら攻撃する。攻撃先を選択`,o,{card:x});
@@ -10216,6 +10236,94 @@ BS('c1111','大地の咆哮','自然',2,[STT,'自分のマナゾーンから、�
 
 /* 巨大設計図はコスト2 */
 DEFS.c998.cost=2;
+UI.offCache={};
+CARD_IDS=Object.keys(DEFS).filter(k=>!DEFS[k].gr&&!DEFS[k].hidden).sort((a,b)=>+a.slice(1)-+b.slice(1));
+
+/* ===== カードデータ（鬼／モモキング c1112〜c1123） ===== */
+const q25DO=c=>!!c&&(civOf(c).includes('闇')||civOf(c).includes('火'));
+const q25ONI='鬼タイム：自分と相手のシールドの数が合計6つ以下なら、';
+/* 三眼鬼：山札の下から2枚を表向き */
+async function q25Sangan(pi){
+  const P=G.p[pi];if(!P.deck.length)return;
+  const L=P.deck.slice(0,Math.min(2,P.deck.length));
+  log(`邪王来混沌三眼鬼：山札の下から${L.length}枚を表向きにした：${revealTxt(L)}`);render();
+  const ev=await choose(pi,'出す、コスト5以下の進化クリーチャー（最大1体）',L.filter(x=>DEFS[x.id].type==='c'&&DEFS[x.id].evo&&cc(x)<=5&&!putBlocked(pi,x)&&evoFeasible(pi,x)),bigPick,true);
+  if(ev)await evolveFromZone(pi,ev,'deck');
+  if(G.over)return;
+  const ta=await choose(pi,'出す、コスト5以下のタマシード（最大1枚）',L.filter(x=>x!==ev&&P.deck.includes(x)&&isTama(x)&&cc(x)<=5),bigPick,true);
+  if(ta)await putFrom(pi,ta,'deck');
+  if(G.over)return;
+  const rest=L.filter(x=>P.deck.includes(x));rest.forEach(x=>{zoneRemove(pi,x,'deck');P.grave.push(plain(x));});
+  if(rest.length)log(`残り${rest.length}枚を墓地に置いた`);render();
+}
+DEFS.c1112={name:'邪王来混沌三眼鬼',civ:['火'],cost:5,power:7000,powTag:'+',type:'c',race:['デモニオ','鬼レクスターズ'],kw:['wbreaker'],star:true,
+  evo:{kind:'one',test:x=>hasR(x,'レクスターズ')||civOf(x).includes('火'),label:'レクスターズまたは火のクリーチャー'},
+  txt:['スター進化：レクスターズまたは火のクリーチャー1体の上に置く。','W・ブレイカー','バトル中、このクリーチャーのパワーを+4000する。','クリーチャーは、可能なら攻撃する。','クリーチャーが攻撃する時、それがこのターン最初の攻撃なら、自分の山札の下から2枚を表向きにする。その中から、コスト5以下の進化クリーチャーを最大1体とコスト5以下のタマシードを最大1枚出す。その後、残りを墓地に置く。'],
+  powerPlus:c=>G.battling&&G.battling.includes(c)?4000:0,allMustAtk:true,
+  async onMyAttack(pi,c,a){if(G.atkN[pi]===1)await q25Sangan(pi);},
+  async onOppAttack(pi,c,a){if(G.atkN[1-pi]===1)await q25Sangan(pi);}};
+DEFS.c1113={name:'キズグイ変怪',civ:['火'],cost:3,power:4000,type:'c',race:['デモニオ','鬼札王国'],kw:['sa'],
+  txt:['スピードアタッカー','このクリーチャーが攻撃する時、自分のシールドを1つ、手札に加える。ただし、その「S・トリガー」は使えない。',q25ONI+'このクリーチャーの攻撃中、自分のカードはシールドゾーンを離れない。'],
+  async onAttack(pi,c){await q24shieldToHandPick(pi);if(oniTime()){G.shStay={pi,uid:c.uid};log('鬼タイム：このクリーチャーの攻撃中、自分のシールドはシールドゾーンを離れない');}},
+  async afterAttack(){G.shStay=null;}};
+DEFS.c1114={name:'カンゴク入道',civ:['火'],cost:2,power:2000,powTag:'+',type:'c',race:['デモニオ','鬼札王国'],kw:[],
+  txt:['自分のターンの終わりに、自分のシールドを1つ、手札に加える。ただし、その「S・トリガー」は使えない。',q25ONI+'このクリーチャーのパワーを+3000する。'],
+  powerPlus:()=>oniTime()?3000:0,async endFx(pi){await q24shieldToHandPick(pi);}};
+DEFS.c1115={name:'「大蛇」の鬼 ジャドク丸',civ:['闇'],cost:3,power:2000,powTag:'+',type:'c',race:['デモニオ','鬼札王国'],kw:[],
+  txt:['このクリーチャーが出た時、自分のシールドを1つ手札に加える。ただし、その「S・トリガー」は使えない。その後、相手のアンタップしているクリーチャーを1体選び、破壊する。',q25ONI+'このクリーチャーのパワーを+4000し、「W・ブレイカー」を与える。'],
+  powerPlus:()=>oniTime()?4000:0,grant:{wbreaker:(x,c)=>c===x&&oniTime()},
+  async onEnter(pi){await q24shieldToHandPick(pi);if(G.over)return;const t=await chooseOpp(pi,'破壊する相手のアンタップしているクリーチャー',x=>!x.tapped);if(t)await destroy(1-pi,t);}};
+DEFS.c1116={name:'鬼ヶ覇王 ジャオウガ',civ:['闇','火'],cost:10,power:17000,type:'c',race:['デモニオ','鬼札王国'],kw:['sa','tbreaker'],
+  txt:[q25ONI+'このクリーチャーの召喚コストを5少なくする。','スピードアタッカー','T・ブレイカー','このクリーチャーは、召喚されたターン、離れない。','このクリーチャーが出た時、クリーチャーをすべて破壊する。'],
+  costRed:()=>oniTime()?5:0,noLeaveIf:c=>c.sumT===G.turnNo,
+  async onEnter(pi,c,ctx){if(ctx&&ctx.summon)c.sumT=G.turnNo;await massAll(x=>D(x).type==='c');}};
+DEFS.c1117={name:'鬼ヶ英悪 ジャオウガOG',civ:['闇','火'],cost:5,power:5000,type:'c',race:['デモニオ','デーモン・コマンド','鬼レクスターズ'],kw:['sa'],oniEndSeed:true,oniEndCivs:['闇','火'],
+  txt:['鬼エンド：クリーチャーが攻撃する時、シールドが1つもないプレイヤーがいて、自分のマナゾーンに闇のカードと火のカードがそれぞれ1枚以上あれば、このクリーチャーを自分の手札からコストを支払わずに召喚してもよい。','スピードアタッカー','このクリーチャーが出た時、相手の「ブロッカー」を持つクリーチャーを1体選び、破壊する。'],
+  async onEnter(pi){const t=await chooseOpp(pi,'破壊する相手の「ブロッカー」',x=>hasKw(x,'blocker'));if(t)await destroy(1-pi,t);}};
+DEFS.c1118={name:'鬼ヶ羅刹 ジャオウガ',civ:['闇','火'],cost:6,power:7000,type:'c',race:['デモニオ','鬼札王国'],kw:['gstrike','sa','wbreaker'],freeLabel:'鬼タイム',
+  freeIf:pi=>{if(!oniTime())return false;const P=G.p[pi];if(!P.mana.some(m=>mCiv(m).includes('闇'))||!P.mana.some(m=>mCiv(m).includes('火')))return false;return !P.bz.some(x=>DEFS[x.id].name==='鬼ヶ羅刹 ジャオウガ');},
+  txt:['G・ストライク（このクリーチャーを自分のシールドゾーンから手札に加える時、相手に見せ、相手のクリーチャーを1体選んでもよい。このターン、そのクリーチャーは攻撃できない）',q25ONI.replace('なら、','で、')+'自分のマナゾーンに闇のカードと火のカードがそれぞれ1枚以上あり、バトルゾーンに自分の《鬼ヶ羅刹 ジャオウガ》がなければ、このクリーチャーをコストを支払わずに召喚してもよい。','スピードアタッカー','W・ブレイカー']};
+DEFS.c1119={name:'鬼ヶ伝双 VSジャオウガ',civ:['闇','火'],cost:3,power:7000,type:'c',race:['デモニオ','鬼札王国'],kw:['wbreaker'],dmrOne:true,
+  txt:['W・ブレイカー','このクリーチャーが出た時または自分のターンのはじめに、自分のシールドを1つ手札に加えてもよい。ただし、その「S・トリガー」は使えない。',q25ONI+'自分の闇または火のクリーチャーすべてに「スピードアタッカー」と「スレイヤー」を与える。','鬼エンド：このクリーチャーが攻撃する時、シールドが1つもないプレイヤーがいれば、闇または火のカードを1枚、自分の墓地から手札に戻してもよい。その後、コスト4以下の、闇または火のクリーチャーを1体、自分の手札から出してもよい。','自分の同名のDMRは2つ以上出せない。'],
+  grant:{sa:(x,c)=>oniTime()&&D(c).type==='c'&&q25DO(c),slayer:(x,c)=>oniTime()&&D(c).type==='c'&&q25DO(c)},
+  async onEnter(pi,c){const P=G.p[pi];if(P.shields.length&&await askYN(pi,'自分のシールドを1つ手札に加えますか？（S・トリガーは使えない）',c,P.shields.length>=4&&P.hand.length<5))await q24shieldToHandPick(pi);},
+  async startFx(pi,c){const P=G.p[pi];if(P.shields.length&&await askYN(pi,'鬼ヶ伝双 VSジャオウガ：自分のシールドを1つ手札に加えますか？（S・トリガーは使えない）',c,P.shields.length>=4&&P.hand.length<5))await q24shieldToHandPick(pi);},
+  async onAttack(pi){if(!G.p.some(Q=>!Q.shields.length))return;log('鬼エンド！');await graveToHand(pi,x=>q25DO(x),'墓地から手札に戻す闇または火のカード');if(G.over)return;
+    const P=G.p[pi];const h=await choose(pi,'手札から出す、コスト4以下の闇または火のクリーチャー',P.hand.filter(x=>DEFS[x.id].type==='c'&&q25DO(x)&&cc(x)<=4&&!DEFS[x.id].evo&&!putBlocked(pi,x)),bigPick,true);if(h)await putFrom(pi,h,'hand');}};
+/* MAX-Gジョラゴン */
+async function q25Jora(pi,c){
+  const P=G.p[pi];await draw(pi,1);if(G.over||!P.hand.length)return;
+  const x=await choose(pi,'MAX-Gジョラゴン：マナゾーンに置く手札',P.hand,l=>l.find(y=>(isJ(y)||hasR(y,'レクスターズ'))&&crOrTama(y)&&D(y).type==='c')||cpuDiscardPick(l));
+  if(!x)return;P.hand.splice(P.hand.indexOf(x),1);await putMana(pi,plain(x));log(`『${nameOf(x)}』をマナゾーンに置いた`);
+  if((isJ(x)||hasR(x,'レクスターズ'))&&crOrTama(x)&&P.bz.includes(c)){c.brw=(c.brw||[]).filter(b=>G.turnNo<=b.until);c.brw.push({id:x.id,until:G.turnNo+1});c._bm=null;log(`MAX-Gジョラゴン：次の相手のターンの終わりまで、『${nameOf(x)}』の能力をすべて得た`);}
+  render();
+}
+DEFS.c1120={name:'MAX-Gジョラゴン',civ:['自然'],cost:6,power:11000,type:'c',race:['マスター・ドラゴン','ジョーカーズ','レクスターズ'],kw:['wbreaker'],smax:true,
+  txt:['S-MAX進化：自分がゲームに負ける時、かわりにこのクリーチャーを破壊するか、自分の手札から《MAX-Gジョラゴン》を1枚捨てる。（このクリーチャーは進化元を必要としない。自分のS-MAX進化クリーチャーが2体以上あれば、そのうちの1体を残し、残りをすべて手札に戻す）','W・ブレイカー','このクリーチャーが召喚によって出た時、または自分のターンのはじめに、カードを1枚引き、その後、自分の手札を1枚マナゾーンに置く。こうしてマナゾーンに置いたカードが、ジョーカーズまたはレクスターズの、クリーチャーまたはタマシードなら、次の相手のターンの終わりまで、その置いたカードが持つ能力をすべて、このクリーチャーに与える。'],
+  async onEnter(pi,c,ctx){const L=G.p[pi].bz.filter(x=>x!==c&&DEFS[x.id].smax);for(const x of L){if(G.over)return;await toOwner(x,'hand');}if(G.over||!(ctx&&ctx.summon))return;await q25Jora(pi,c);},
+  async startFx(pi,c){await q25Jora(pi,c);}};
+DEFS.c1121={name:'勝熱夢双 モモキング',civ:['火','自然'],cost:5,power:7000,type:'c',race:['ジョーカーズ','ヒーロー・ドラゴン','レクスターズ'],kw:['wbreaker'],
+  txt:['W・ブレイカー','このクリーチャーが出た時、相手の「ブロッカー」を持つクリーチャーを1体選び、破壊する。','各ターン、はじめて自分のクリーチャーが攻撃する時、自分の山札の上から2枚をマナゾーンに置き、カードを2枚まで、自分のマナゾーンから手札に戻し、その後、自分のマナゾーンにあるジョーカーズをすべてアンタップする。','各ターンに1度、自分のクリーチャーの攻撃の終わりに、そのクリーチャーがその攻撃中にシールドをブレイクしていれば、クリーチャーを1体、自分の手札から召喚してもよい。（コストは支払う）'],
+  async onEnter(pi){const t=await chooseOpp(pi,'破壊する相手の「ブロッカー」',x=>hasKw(x,'blocker'));if(t)await destroy(1-pi,t);},
+  async onMyAttack(pi,c){if(G.atkN[pi]!==1)return;const P=G.p[pi];await manaTop(pi,2);if(G.over)return;
+    for(let i=0;i<2&&P.mana.length;i++){const x=await choose(pi,`マナゾーンから手札に戻すカード（${i+1}/2）`,P.mana.map(m=>m.card),bigPick,true);if(!x)break;toHandFrom(pi,x,'mana');}
+    let n=0;P.mana.forEach(m=>{if(m.tapped&&isJ(m.card)){m.tapped=false;n++;}});if(n)log(`マナゾーンのジョーカーズ${n}枚をアンタップした`);render();},
+  async onMyAfterAttack(pi,c,a){if(!a.brk||c.ymT===G.turnNo)return;const P=G.p[pi];
+    const L=P.hand.filter(h=>DEFS[h.id].type==='c'&&playOptions(pi,h,'hand').some(o=>o.key==='c'&&!o.why));if(!L.length)return;
+    const h=await choose(pi,'勝熱夢双 モモキング：コストを支払って召喚するクリーチャー',L,bigPick,true);if(!h)return;c.ymT=G.turnNo;await runPlay(pi,h,'hand','c');}};
+DEFS.c1122={name:'勝熱伝双 モモキングVS',civ:['火','自然'],cost:5,power:9000,type:'c',race:['ジョーカーズ','ヒーロー・ドラゴン','チーム切札'],kw:['sa','wbreaker'],kirifuda:4,fromMana:true,dmrOne:true,
+  txt:['キリフダッシュ4（自分のクリーチャーの攻撃の終わりに、そのクリーチャーがその攻撃中にシールドをブレイクしていれば、このカードを4支払って実行してもよい）','このクリーチャーを自分のマナゾーンから召喚してもよい。','スピードアタッカー','W・ブレイカー','このクリーチャーが攻撃する時、自分の他のジョーカーズを1つマナゾーンに置いてもよい。そうしたら、ジョーカーズ・メクレイド8する。','自分の同名のDMRは2つ以上出せない。'],
+  async onAttack(pi,c){const P=G.p[pi];const L=[...P.bz,...(P.ts||[])].filter(x=>x!==c&&isJ(x));if(!L.length)return;const x=await choose(pi,'マナゾーンに置く自分の他のジョーカーズ（置いたらジョーカーズ・メクレイド8）',L,weakPick,true);if(!x)return;const ok=await toOwner(x,'mana');if(ok===false||G.over)return;await mekuraid(pi,8,y=>isJ(y),'ジョーカーズ・メクレイド');}};
+DEFS.c1123={name:'勝熱百覇 モモキングReVo',civ:['火','自然'],cost:7,power:11000,type:'c',race:['ヒーロー・ドラゴン','ジョーカーズ','チーム切札'],kw:['sa','wbreaker'],kirifuda:8,
+  txt:['キリフダッシュ8（自分のクリーチャーの攻撃の終わりに、そのクリーチャーがその攻撃中にシールドをブレイクしていれば、このクリーチャーを8支払って召喚してもよい）','スピードアタッカー','W・ブレイカー','自分の手札にあるチーム切札すべてに「キリフダッシュ2」を与える。','キリフダReVo：このクリーチャーが「キリフダッシュ」能力によってバトルゾーンに出た時、自分の山札の上から2枚をマナゾーンに置き、自分のマナゾーンから3枚まで手札に戻し、自分のマナゾーンのカードをすべてアンタップする。'],
+  giveKirifuda:h=>hasR(h,'チーム切札')?2:0,
+  async onEnter(pi,c,ctx){if(!ctx||ctx.via!=='kirifuda')return;const P=G.p[pi];log('キリフダReVo！');await manaTop(pi,2);if(G.over)return;
+    for(let i=0;i<3&&P.mana.length;i++){const x=await choose(pi,`マナゾーンから手札に戻すカード（${i+1}/3）`,P.mana.map(m=>m.card),bigPick,true);if(!x)break;toHandFrom(pi,x,'mana');}
+    P.mana.forEach(m=>m.tapped=false);log('マナゾーンのカードをすべてアンタップした');render();}};
+DEFS.c1124={name:'勝熱英雄 モモキング',civ:['火','自然'],cost:8,power:12000,type:'c',race:['ヒーロー・ドラゴン','ジョーカーズ','チーム切札'],kw:['sa','tbreaker'],kirifuda:6,monoHex:true,
+  txt:['キリフダッシュ6（自分のクリーチャーの攻撃の終わりに、そのクリーチャーがその攻撃中にシールドをブレイクしていれば、このクリーチャーを6支払って召喚してもよい）','スピードアタッカー','T・ブレイカー','各ターン、このクリーチャーがはじめて攻撃する時、その攻撃の後、このクリーチャーをアンタップする。','相手は、多色ではない、クリーチャーの能力または呪文でこのクリーチャーを選べない。'],
+  async onAttack(pi,c){if(c.atkN===1)c.uaf=true;}};
+
 UI.offCache={};
 CARD_IDS=Object.keys(DEFS).filter(k=>!DEFS[k].gr&&!DEFS[k].hidden).sort((a,b)=>+a.slice(1)-+b.slice(1));
 
