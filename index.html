@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
 <meta name="googlebot" content="noindex,nofollow">
-<title>デュエル・マスターズ シミュレーター</title>
+<title>カードバトル練習場</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -10708,7 +10708,7 @@ function deckInfo(){
 function titleHTML(){
   const n=CARD_IDS.length;
   const ok=validIds(myDeckIds());
-  return `<div class="title"><h1>デュエル・マスターズ<br>シミュレーター</h1><p class="sub">デュエル・マスターズのルールで遊ぶ、非公式のファンメイド対戦アプリ</p>
+  return `<div class="title"><h1>カードバトル<br>練習場</h1><p class="sub">仲間うちで遊ぶための、非公式の対戦アプリ</p>
   ${deckInfo()}
   <button class="primary big" data-do="start" ${ok?'':'disabled'}>CPUと対戦（あなたが先攻）</button>
   <p class="note">カードは文字だけで表示します。GRゾーンのクリーチャーは、このアプリ用の仮カードです。収録カードは全${n}種。CPUのデッキは、毎回おすすめデッキの中からランダムに選ばれます（40枚）。</p>
@@ -11024,7 +11024,7 @@ titleHTML=function(){
     <p class="msub">① 使うデッキを選ぶ　② 1人が「部屋をつくる」→ 出た合言葉を相手に伝える　③ 相手は合言葉を入れて「入る」</p>
     ${deck}${on}</div>`;
   }
-  return `<div class="title mhome"><h1>デュエル・マスターズ<br>シミュレーター</h1>
+  return `<div class="title mhome"><h1>カードバトル<br>練習場</h1>
   <p class="sub">遊びたいものを選んでください</p>
   <div class="mtiles">
     <button class="mtile t1" onclick="menuGo('cpu')"><span class="mi">⚔</span><span class="mt"><b>CPUと対戦</b><small>デッキを選んで、すぐに1人で遊べます</small></span></button>
@@ -11033,7 +11033,7 @@ titleHTML=function(){
     <button class="mtile t4" data-do="rules"><span class="mi">？</span><span class="mt"><b>遊び方</b><small>ルールと操作の説明</small></span></button>
   </div>
   ${menuDeckLine()}
-  <p class="note">デュエル・マスターズのルールで遊ぶ、非公式のファンメイド対戦アプリです。収録カードは全${CARD_IDS.length}種。</p></div>`;
+  <p class="note">仲間うちで遊ぶための、非公式の対戦アプリです。収録カードは全${CARD_IDS.length}種。</p></div>`;
 };
 try{if((UI.screen==='title'||!UI.screen)&&!G)render();}catch(e){}
 
