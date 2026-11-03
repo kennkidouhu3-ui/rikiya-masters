@@ -1724,6 +1724,7 @@ async function leaveBZ(pi,c,dest,o={}){
   if(isCr&&o.destroy&&dest==='grave'&&P.bz.some(x=>D(x).dokkoi&&!ignored(x))){dest=await modeAsk(pi,`ドッコイ：『${nameOf(c)}』は破壊されるかわりに、どこに置きますか？`,[{label:'手札に戻す',value:'hand'},{label:'マナゾーンに置く',value:'mana'}],cc(c)>=5?'hand':'mana');log(`ドッコイ：『${nameOf(c)}』は破壊されるかわりに${dest==='hand'?'手札に戻る':'マナゾーンに置かれる'}`);}
   if(o.destroy&&dest==='grave'&&D(c).deathMana&&!ignored(c)){dest='mana';}
   if(isCr&&dest==='grave'&&!ignored(c)&&D(c).graveRepl){const r=await D(c).graveRepl(pi,c,o);if(r)dest=r;if(!arr.includes(c))return false;}
+  if(isCr&&dest==='grave'){for(const y of [...P.bz]){if(y===c||ignored(y)||!D(y).otherGraveRepl)continue;const r=await D(y).otherGraveRepl(pi,y,c,o);if(r){dest=r;break;}}if(!arr.includes(c))return false;}
   arr.splice(arr.indexOf(c),1);
   if(c.lg){const rest=P.bz.filter(x=>x.lg===c.lg);if(rest.length)log(`リンクしていた『${nameOf(c)}』だけが離れた`);if(rest.length===1){delete rest[0].lg;delete rest[0].slot;}delete c.lg;delete c.slot;}
   let stack=[plain(c),...(c.under||[]).map(plain),...(c.pile||[]).map(plain)];
@@ -2053,7 +2054,7 @@ async function playCard(pi,card,o={}){
     if(hooks)await oppPlayHooks(pi,card,d,true);
     if(!G.over)await runSpellFx(pi,d,o);
     if(d.toShield){await addShield(o.ownerPi!==undefined?o.ownerPi:pi,card,!!d.castle,true);log(`『${d.name}』はシールド化された`);if(d.afterResolve&&!G.over)await d.afterResolve(pi,card);}
-    else if(d.charger){const e={card:plain(card),tapped:false};if(d.fdCharger)e.fd=true;dst.mana.push(e);log(`『${d.name}』は${d.fdCharger?'裏向きで':''}マナゾーンに置かれた（チャージャー）`);render();await manaHooks(G.p.indexOf(dst),e);}
+    else if(d.charger){const e={card:plain(card),tapped:false};if(d.fdCharger)e.fd=true;dst.mana.push(e);log(`『${d.name}』は${d.fdCharger?'裏向きで':''}マナゾーンに置かれた（チャージャー）`);render();await manaHooks(G.p.indexOf(dst),e);if(d.afterCharge&&!G.over)await d.afterCharge(G.p.indexOf(dst),card);}
     else if(d.selfOut&&G.cur===pi&&D(card).type==='c'&&!putBlocked(pi,card)){log(`『${D(card).name}』を出す`);await putOnBZ(pi,plain(card),{summon:false});}
     else if(o.toBottom||(from==='grave'&&G.p[pi].bz.some(x=>D(x).cycloBottom&&!ignored(x)))){dst.deck.unshift(plain(card));log(`『${d.name}』は山札の下に置かれた`);}
     else if((d.race||[]).includes('魔導具')&&dst===P&&(P.ts||[]).some(x=>D(x).shinsekai&&!ignored(x))&&await askYN(pi,'卍 新世壊 卍：この魔導具呪文を墓地のかわりにフィールドの下に置いて、カードを1枚引きますか？',card,true)){const fz=P.ts.find(x=>D(x).shinsekai&&!ignored(x));fz.under=fz.under||[];fz.under.push(plain(card));log(`『${d.name}』を新世壊の下に置いた`);render();await draw(pi,1);}
@@ -10089,6 +10090,121 @@ DEFS.c285.civ=['無'];
 DEFS.c270.side.civ=['闇','火'];DEFS.c284.side.civ=['光','火'];DEFS.c508.side.civ=['光','水'];
 DEFS.c717.civ=['火'];DEFS.c717.side.civ=['光','自然'];
 UI.offCache={};
+
+/* ===== カードデータ（DM-02 進化獣降臨） c1052〜c1111 ===== */
+const q24crC=(c,v)=>D(c).type==='c'&&civOf(c).includes(v);
+const q24othersOf=(c,v)=>G.p[c.owner].bz.filter(x=>x!==c&&q24crC(x,v)).length;
+const q24allMana=(pi,v)=>G.p[pi].mana.every(m=>mCiv(m).includes(v));
+const q24manaPickHand=async(pi,f,title,may)=>{const P=G.p[pi];const L=P.mana.map(m=>m.card).filter(f||(()=>true));if(!L.length)return null;const x=await choose(pi,title,L,bigPick,may);if(x)toHandFrom(pi,x,'mana');return x;};
+const q24ownShieldGrave=async pi=>{const P=G.p[pi];if(!P.shields.length)return;const s=(await pickOwnShields(pi,1,'墓地に置く自分のシールド'))[0]||P.shields[P.shields.length-1];const i=P.shields.indexOf(s);if(i<0)return;P.shields.splice(i,1);P.grave.push(plain(s));log('自分のシールドを1枚墓地に置いた');render();await shieldsGone(pi,[s]);};
+/* 自分のシールドを好きな数選ぶ（CPUは2枚残す） */
+const q24pickShieldsAny=async(pi,title)=>{const P=G.p[pi];if(P.cpu){const n=Math.max(0,P.shields.length-2);return P.shields.slice(P.shields.length-n);}return pickOwnShields(pi,P.shields.length,title);};
+const q24eachManaToHand=async(pi,n)=>{for(const q of [pi,1-pi]){const Q=G.p[q];for(let i=0;i<n&&Q.mana.length;i++){if(G.over)return;const x=await choose(q,`手札に戻す自分のマナゾーンのカード（${i+1}/${n}）`,Q.mana.map(m=>m.card),bigPick);if(x)toHandFrom(q,x,'mana');}}};
+const q24handToShield=async(pi,may)=>{const P=G.p[pi];if(!P.hand.length)return null;const x=await choose(pi,'裏向きにしてシールドに加える手札',P.hand,cpuDiscardPick,may);if(!x)return null;P.hand.splice(P.hand.indexOf(x),1);await addShield(pi,plain(x),false,true);log('手札を1枚、裏向きにしてシールドに加えた');render();return x;};
+const q24shieldToHandPick=async(pi)=>{const P=G.p[pi];if(!P.shields.length)return;const s=(await pickOwnShields(pi,1,'手札に加える自分のシールド'))[0]||P.shields[P.shields.length-1];const i=P.shields.indexOf(s);if(i<0)return;P.shields.splice(i,1);P.hand.push(plain(s));log('シールドを1つ手札に加えた（S・トリガーは使えない）');render();await shieldsGone(pi,[s]);};
+const q24NC=(v)=>`このクリーチャーのパワーは、バトルゾーンにある自分の他の${v}のクリーチャー1体につき+1000される。`;
+const q24ALLM=(v,s)=>`自分のマナゾーンにあるカードがすべて${v}のカードである間、${s}`;
+const q24SH='このクリーチャーがバトルゾーンから自分の墓地に置かれるとき、裏向きにして自分のシールドに加える。';
+const q24SLY='スレイヤー（このクリーチャーとバトルした相手クリーチャーは、勝っても持ち主の墓地に置かれる）';
+
+BC('c1052','流星の精霊ミーア','光',8,11500,'エンジェル・コマンド',['wbreaker'],[WB]);
+BC('c1053','混沌魚','水',7,1000,'ゲル・フィッシュ',[],[q24NC('水'),'このクリーチャーが攻撃するとき、自分の山札から好きな枚数のカードを引いてよい。ただし、その枚数は、バトルゾーンにある自分の他の水のクリーチャーの数までであること。'],
+  {powerPlus:c=>1000*q24othersOf(c,'水'),async onAttack(pi,c){const n=q24othersOf(c,'水');if(!n)return;const P=G.p[pi];const v=await modeAsk(pi,`混沌魚：カードを何枚引きますか？（${n}枚まで）`,Array.from({length:n+1},(_,i)=>({label:i+'枚',value:i})),Math.max(0,Math.min(n,P.deck.length-6,8-P.hand.length)));if(v>0)await draw(pi,v);}});
+BC('c1054','凶闘の魔人ギリエル','闇',8,11000,'デーモン・コマンド',['wbreaker'],[WB]);
+BC('c1055','ガルカーゴ・ドラゴン','火',7,6000,'アーマード・ドラゴン',['wbreaker'],[WB,q24NC('火'),'このクリーチャーは、タップされていないクリーチャーを攻撃できる。'],{powerPlus:c=>1000*q24othersOf(c,'火'),atkUntapped:true});
+BC('c1056','天空の超人','自然',5,8000,'ジャイアント',['wbreaker'],[WB,'このクリーチャーが攻撃するとき、自分のマナゾーンにあるクリーチャーをすべて、自分の手札に戻す。'],
+  {async onAttack(pi){const P=G.p[pi];const L=P.mana.map(m=>m.card).filter(x=>DEFS[x.id].type==='c');L.forEach(x=>{zoneRemove(pi,x,'mana');P.hand.push(plain(x));});if(L.length)log(`マナゾーンのクリーチャー${L.length}枚を手札に戻した`);render();}});
+BC('c1057','聖天使ジーク・バリキューラ','光',3,5000,'イニシエート',[],['進化：自分のイニシエート1体の上に置く。','このクリーチャーがバトルゾーンにある間、バトルゾーンにある自分の他の光のクリーチャーは「ブロッカー」を得る。'],
+  {evo:EVO('イニシエート'),grant:{blocker:(x,c)=>c!==x&&q24crC(c,'光')}});
+BC('c1058','レジェンダリー・バイロン','水',6,8000,'リヴァイアサン',['wbreaker'],['進化：自分のリヴァイアサン1体の上に置く。',WB,'このクリーチャーがバトルゾーンにある間、バトルゾーンにある自分の他の水のクリーチャーはブロックされない。'],
+  {evo:EVO('リヴァイアサン'),grant:{unblockableG:(x,c)=>c!==x&&q24crC(c,'水')}});
+BC('c1059','絶望の魔黒ジャックバイパー','闇',3,4000,'ゴースト',[],['進化：自分のゴースト1体の上に置く。','このクリーチャーがバトルゾーンにある間に、自分の他の闇のクリーチャーがバトルゾーンから墓地に置かれるとき、その闇のクリーチャーを自分の手札に戻してよい。'],
+  {evo:EVO('ゴースト'),async otherGraveRepl(pi,y,c){if(!q24crC(c,'闇'))return null;return await askYN(pi,`ジャックバイパー：『${nameOf(c)}』を墓地に置くかわりに手札に戻しますか？`,c,true)?'hand':null;}});
+BC('c1060','超竜ジャババ','火',7,11000,'アーマード・ドラゴン',['wbreaker'],['進化：自分のアーマード・ドラゴン1体の上に置く。',WB,'このクリーチャーがバトルゾーンにある間、攻撃中、バトルゾーンにある自分の他の火のクリーチャーのパワーは+2000される。'],
+  {evo:EVO('アーマード・ドラゴン'),auraPow:(y,c)=>q24crC(c,'火')&&G.atkUid===c.uid?2000:0});
+BC('c1061','大昆虫ギガマンティス','自然',4,5000,'ジャイアント・インセクト',[],['進化：自分のジャイアント・インセクト1体の上に置く。','このクリーチャーがバトルゾーンにある間に、自分の他の自然のクリーチャーがバトルゾーンから墓地に置かれるとき、その自然のクリーチャーを自分のマナゾーンに置く。'],
+  {evo:EVO('ジャイアント・インセクト'),async otherGraveRepl(pi,y,c){if(!q24crC(c,'自然'))return null;log(`ギガマンティス：『${nameOf(c)}』は墓地のかわりにマナゾーンに置かれる`);return 'mana';}});
+BC('c1062','雷雲の守護者ラーザ・ベガ','光',10,3000,'ガーディアン',['blocker'],[BLK,q24SH],{graveRepl:async()=>'shield'});
+BC('c1063','堅牢の伝道師アレーク','光',7,4000,'バーサーカー',['blocker'],[BLK,q24NC('光')],{powerPlus:c=>1000*q24othersOf(c,'光')});
+BS('c1064','プロテクト・キューブ','光',3,[STT,'自分のマナゾーンから呪文を1枚選び、自分の手札に戻す。'],async pi=>{await q24manaPickHand(pi,x=>DEFS[x.id].type==='s','マナゾーンから手札に戻す呪文');},{st:true});
+BC('c1065','アクア・デフォーマー','水',8,3000,'リキッド・ピープル',[],['このクリーチャーがバトルゾーンに出たとき、各プレイヤーは自分自身のマナゾーンからカードを2枚ずつ選び、それぞれの手札に戻す。'],{async onEnter(pi){await q24eachManaToHand(pi,2);}});
+BC('c1066','キング・ネプタス','水',6,5000,'リヴァイアサン',[],['このクリーチャーが攻撃するとき、相手がブロックする前に、バトルゾーンにあるパワー2000以下のクリーチャーを1体選び、持ち主の手札に戻してよい。'],
+  {async onAttack(pi){const t=await choose(pi,'持ち主の手札に戻すパワー2000以下のクリーチャー',anyCr(pi).filter(x=>pow(x)<=2000),l=>l.find(y=>y.owner!==pi)||null,true);if(t)await toOwner(t,'hand');}});
+BS('c1067','ストリーミング・シェイパー','水',3,['自分の山札のカードを、上から4枚表向きにする。その中の水のカードをすべて自分の手札に加え、それ以外のカードを自分の墓地に置く。'],
+  async pi=>{const P=G.p[pi];const L=topN(pi,4);if(!L.length)return;log(`山札の上から${L.length}枚を表向きにした：${revealTxt(L)}`);L.forEach(x=>{if(civOf(x).includes('水'))P.hand.push(plain(x));else P.grave.push(plain(x));});const n=L.filter(x=>civOf(x).includes('水')).length;log(`水のカード${n}枚を手札に加え、残りを墓地に置いた`);render();});
+BC('c1068','憎悪の騎士ガミル','闇',6,4000,'デーモン・コマンド',[],['このクリーチャーが攻撃するとき、自分の墓地から闇のクリーチャーを1体選び、自分の手札に戻してよい。'],{async onAttack(pi){await graveToHand(pi,x=>q24crC(x,'闇'),'墓地から手札に戻す闇のクリーチャー');}});
+BC('c1069','牙男','闇',4,1000,'ヘドリアン',['slayer'],[q24SLY,q24NC('闇')],{powerPlus:c=>1000*q24othersOf(c,'闇')});
+BS('c1070','デビル・ドレーン','闇',3,['自分のシールドから好きな枚数を裏向きのまま選び、自分の手札に加える。ただし、その「S・トリガー」は使えない。'],
+  async pi=>{const P=G.p[pi];const L=await q24pickShieldsAny(pi,'手札に加える自分のシールド');if(!L.length)return;L.forEach(s=>{P.shields.splice(P.shields.indexOf(s),1);P.hand.push(plain(s));});log(`シールドを${L.length}つ手札に加えた（S・トリガーは使えない）`);render();await shieldsGone(pi,L);});
+BC('c1071','ボルテール・ドラゴン','火',7,9000,'アーマード・ドラゴン',['wbreaker'],[WB]);
+BC('c1072','フレムトロプス','火',4,3000,'ロック・ビースト',[],['このクリーチャーが攻撃するとき、自分のマナゾーンからカードを1枚選び、自分の墓地に置いてよい。そうしたなら、このターン、このクリーチャーは「パワーアタッカー+3000」と「W・ブレイカー」を得る。'],
+  {async onAttack(pi,c){const P=G.p[pi];if(!P.mana.length)return;const x=await choose(pi,'墓地に置く自分のマナゾーンのカード（このクリーチャーはパワーアタッカー+3000とW・ブレイカーを得る）',P.mana.map(m=>m.card),l=>P.mana.length>=6?(l.find(y=>P.mana.find(m=>m.card===y).tapped)||l[0]):null,true);if(!x)return;zoneRemove(pi,x,'mana');P.grave.push(plain(x));log(`マナゾーンの『${nameOf(x)}』を墓地に置いた`);c.atkP={t:G.turnNo,v:3000};setU(c,'wbreaker',pi);log(`『${nameOf(c)}』はこのターン「パワーアタッカー+3000」と「W・ブレイカー」を得た`);render();}});
+BS('c1073','ブレイズ・キャノン','火',7,['自分のマナゾーンのカードがすべて火のカードであれば、このターン、バトルゾーンにある自分のクリーチャーはすべて「パワーアタッカー+4000」と「W・ブレイカー」を得る。'],
+  async pi=>{if(!q24allMana(pi,'火')){log('マナゾーンに火以外のカードがあるので、効果はなかった');return;}G.p[pi].bz.filter(x=>D(x).type==='c').forEach(x=>{x.atkP={t:G.turnNo,v:4000};setU(x,'wbreaker',pi);});log('このターン、自分のクリーチャーはすべて「パワーアタッカー+4000」と「W・ブレイカー」を得た');render();});
+BC('c1074','マボロシキリダケ','自然',4,2000,'バルーン・マッシュルーム',[],['このクリーチャーが攻撃するとき、自分の墓地から自然のカードを1枚選び、自分のマナゾーンに置いてよい。'],
+  {async onAttack(pi){const P=G.p[pi];const x=await choose(pi,'墓地からマナゾーンに置く自然のカード',P.grave.filter(y=>civOf(y).includes('自然')),bigPick,true);if(x){zoneRemove(pi,x,'grave');await putMana(pi,plain(x));log(`墓地の『${nameOf(x)}』をマナゾーンに置いた`);render();}}});
+BC('c1075','夜明けの超人','自然',7,11000,'ジャイアント',['wbreaker'],[WB,'このクリーチャーは、クリーチャーを攻撃できない。'],{noAtkCr:true});
+BS('c1076','逆転のオーロラ','自然',5,['自分のシールドから好きな枚数を裏向きのまま選び、表向きにして自分のマナゾーンに置く。'],
+  async pi=>{const P=G.p[pi];const L=await q24pickShieldsAny(pi,'マナゾーンに置く自分のシールド');if(!L.length)return;for(const s of L){P.shields.splice(P.shields.indexOf(s),1);await putMana(pi,plain(s));}log(`シールドを${L.length}つ、表向きにしてマナゾーンに置いた`);render();await shieldsGone(pi,L);});
+BC('c1077','雷電の求道者ラ・ビュー','光',6,4000,'メカサンダー',[],['このクリーチャーが攻撃するとき、自分の墓地から光の呪文を1枚、自分の手札に戻してよい。'],{async onAttack(pi){await graveToHand(pi,x=>DEFS[x.id].type==='s'&&civOf(x).includes('光'),'墓地から手札に戻す光の呪文');}});
+BC('c1078','線光花','光',4,3000,'スターライト・ツリー',[],[q24ALLM('光','このクリーチャーは「ブロッカー」を得る。')],{grant:{blocker:(x,c)=>c===x&&q24allMana(x.owner,'光')}});
+BS('c1079','ライト・ブーメラン','光',6,[STT,'この呪文を、自分の墓地ではなく自分のマナゾーンに置く。その後、自分のマナゾーンからカードを1枚選び、自分の手札に戻す。'],
+  async()=>{},{st:true,charger:true,async afterCharge(pi){await q24manaPickHand(pi,null,'マナゾーンから手札に戻すカード');}});
+BC('c1080','キング・ボニータス','水',8,4000,'リヴァイアサン',[],['このクリーチャーが攻撃するとき、自分の山札を見る。その中から水のカードを1枚選び、相手に見せてから自分の手札に加えてよい。その後、山札をシャッフルする。'],{async onAttack(pi){await deckSearch(pi,x=>civOf(x).includes('水'),'山札から手札に加える水のカード');}});
+BC('c1081','スティンガー・ボール','水',3,1000,'サイバー・ウィルス',[],['このクリーチャーが攻撃するとき、相手のシールドを1枚見てよい。その後、そのシールドを元の場所に戻す。'],{async onAttack(pi){await peekShield(pi);}});
+BS('c1082','ハイパー・ウェーブ','水',2,[STT,'自分のマナゾーンからカードを1枚選び、自分の手札に戻す。'],async pi=>{await q24manaPickHand(pi,null,'マナゾーンから手札に戻すカード');},{st:true});
+BC('c1083','腐卵虫ハングワーム','闇',5,4000,'パラサイトワーム',[],[]);
+BC('c1084','邪剣バラガ','闇',4,4000,'ダークロード',[],['このクリーチャーがバトルゾーンに出たとき、自分のシールドが1枚でもあれば、その中から1枚を裏向きのまま選び、自分の手札に加える。ただし、その「S・トリガー」は使えない。'],{async onEnter(pi){await q24shieldToHandPick(pi);}});
+BS('c1085','魔流毒','闇',1,[STT,'バトルゾーンにある自分の闇のクリーチャーを1体選び、自分の墓地に置かなければ、この呪文を唱えることはできない。','自分のマナゾーンからクリーチャーを1体選び、自分の手札に戻す。'],
+  async pi=>{const t=await choose(pi,'魔流毒：墓地に置く自分の闇のクリーチャー',G.p[pi].bz.filter(x=>q24crC(x,'闇')),weakPick);if(t)await destroy(pi,t);if(G.over)return;await q24manaPickHand(pi,x=>DEFS[x.id].type==='c','マナゾーンから手札に戻すクリーチャー');},
+  {st:true,castNeed:pi=>G.p[pi].bz.some(x=>q24crC(x,'闇'))});
+BC('c1086','切断伯爵ムラマサ','火',6,3000,'ヒューマノイド',[],['このクリーチャーが攻撃するとき、バトルゾーンにあるパワー2000以下の相手のクリーチャーを1体選び、持ち主の墓地に置いてよい。'],
+  {async onAttack(pi){if(!targetable(pi).some(x=>pow(x)<=2000))return;const t=await chooseOpp(pi,'墓地に置くパワー2000以下の相手のクリーチャー',x=>pow(x)<=2000,strongPick,true);if(t)await destroy(1-pi,t);}});
+BC('c1087','甲神兵クエロス','火',5,2000,'アーマロイド',[],['このクリーチャーが攻撃するとき、各プレイヤーは自分自身のマナゾーンから火以外のカードを1枚選び、それぞれの墓地に置く。'],
+  {async onAttack(pi){for(const q of [pi,1-pi]){const Q=G.p[q];const L=Q.mana.filter(m=>!mCiv(m).includes('火')).map(m=>m.card);if(!L.length)continue;const x=await choose(q,'墓地に置く自分のマナゾーンの火以外のカード',L,l=>l.find(y=>Q.mana.find(m=>m.card===y).tapped)||l[0]);if(x){zoneRemove(q,x,'mana');Q.grave.push(plain(x));log(`${Q.name}のマナゾーンの『${nameOf(x)}』を墓地に置いた`);}}render();}});
+BS('c1088','灼熱波','火',5,['相手は、バトルゾーンにある自分自身のパワー3000以下のクリーチャーすべてを、持ち主の墓地に置く。','自分のシールドが1枚でもあれば、裏向きのまま1枚選び、自分の墓地に置く。'],
+  async pi=>{const L=G.p[1-pi].bz.filter(x=>D(x).type==='c'&&pow(x)<=3000).map(x=>[1-pi,x]);if(L.length)await massDestroy(L);if(G.over)return;await q24ownShieldGrave(pi);});
+BC('c1089','奇面ざくろ','自然',5,1000,'ツリーフォーク',[],[q24NC('自然'),'このクリーチャーは、パワー4000以下のクリーチャーにブロックされない。'],{powerPlus:c=>1000*q24othersOf(c,'自然'),noBlockBy:4000});
+BC('c1090','シェル・ポーチ','自然',4,1000,'コロニー・ビートル',[],['このクリーチャーがバトルゾーンに出たとき、バトルゾーンにある相手の進化クリーチャーを1体選び、そのクリーチャーの一番上のカードを持ち主の墓地に置いてよい。'],
+  {async onEnter(pi){const f=x=>isEvoCr(x)||(DEFS[x.id].neo&&(x.under||[]).length>0);if(!targetable(pi).some(f))return;const t=await chooseOpp(pi,'一番上のカードを墓地に置く相手の進化クリーチャー',f,strongPick,true);if(t)await evoTopDestroy(1-pi,t);}});
+BS('c1091','深緑の魔方陣','自然',4,[STT,'自分のマナゾーンからカードを1枚選び、裏向きにしてシールドに加える。'],
+  async pi=>{const P=G.p[pi];if(!P.mana.length)return;const x=await choose(pi,'裏向きにしてシールドに加えるマナゾーンのカード',P.mana.map(m=>m.card),l=>l.find(y=>P.mana.find(m=>m.card===y).tapped)||l[0]);if(!x)return;zoneRemove(pi,x,'mana');await addShield(pi,plain(x),false,true);log('マナゾーンのカードを1枚、裏向きにしてシールドに加えた');render();},{st:true});
+BC('c1092','予言者アレス','光',6,1000,'ライトブリンガー',[],[q24SH],{graveRepl:async()=>'shield'});
+BC('c1093','陽光の求道者ル・パーレ','光',4,2500,'メカサンダー',[],[q24ALLM('光','このクリーチャーのパワーは+2000される。')],{powerPlus:c=>q24allMana(c.owner,'光')?2000:0});
+BC('c1094','閃光の使徒レーナ','光',4,2000,'イニシエート',[],['このクリーチャーがバトルゾーンに出たとき、自分のマナゾーンから呪文を1枚選び、自分の手札に戻してよい。'],{async onEnter(pi){await q24manaPickHand(pi,x=>DEFS[x.id].type==='s','マナゾーンから手札に戻す呪文',true);}});
+BS('c1095','ホーリー・メール','光',4,['自分の手札からカードを1枚選び、裏向きにして自分のシールドに加える。'],async pi=>{await q24handToShield(pi,false);});
+BC('c1096','シュトラ','水',4,2000,'サイバーロード',[],['このクリーチャーがバトルゾーンに出たとき、各プレイヤーは自分自身のマナゾーンからカードを1枚ずつ選び、それぞれの手札に戻す。'],{async onEnter(pi){await q24eachManaToHand(pi,1);}});
+BC('c1097','アングラー・クラスター','水',3,3000,'サイバー・クラスター',['blocker'],[BLK,CANT,q24ALLM('水','このクリーチャーのパワーは+3000される。')],{cantAtk:true,powerPlus:c=>q24allMana(c.owner,'水')?3000:0});
+BC('c1098','エメラル','水',2,1000,'サイバーロード',[],['このクリーチャーがバトルゾーンに出たとき、自分の手札からカードを1枚選び、裏向きにしてシールドに加えてよい。そうしたなら、自分のシールドを1枚裏向きのまま選び、自分の手札に加える。ただし、その「S・トリガー」は使えない。'],
+  {async onEnter(pi){const P=G.p[pi];if(!P.hand.length)return;if(P.cpu&&!P.shields.length)return;const x=await q24handToShield(pi,true);if(x)await q24shieldToHandPick(pi);}});
+BS('c1099','リキッド・スコープ','水',4,[STT,'相手の手札とシールドを見る。その後、シールドを元の場所に戻す。'],
+  async pi=>{const O=G.p[1-pi];log(`${G.p[pi].name}は相手の手札とシールドを見た`);if(G.p[pi].cpu||isRemote(pi))return;const h=O.hand.map(x=>'『'+nameOf(x)+'』').join('、')||'なし';const s=O.shields.map((x,i)=>`${i+1}:『${nameOf(x)}』`).join('、')||'なし';await ask(pi,`相手の手札：${h}\n相手のシールド：${s}`,[{label:'元に戻す',value:1}]);});
+BC('c1100','泥男','闇',4,2000,'ヘドリアン',[],[q24ALLM('闇','このクリーチャーのパワーは+2000される。')],{powerPlus:c=>q24allMana(c.owner,'闇')?2000:0});
+BC('c1101','嘆きの影ベルベットフロー','闇',3,1000,'ゴースト',['slayer'],[q24SLY]);
+BC('c1102','ボーン・ピアース','闇',2,1000,'ブレインジャッカー',[],['このクリーチャーがバトルゾーンから自分の墓地に置かれるとき、自分のマナゾーンからクリーチャーを1体選び、自分の手札に戻してよい。'],
+  {async graveRepl(pi){await q24manaPickHand(pi,x=>DEFS[x.id].type==='c','マナゾーンから手札に戻すクリーチャー',true);return null;}});
+BS('c1103','スネークアタック','闇',4,['このターン、バトルゾーンにある自分のクリーチャーはすべて、「W・ブレイカー」を得る。','自分のシールドが1枚でもあれば、裏向きのまま1枚選び、自分の墓地に置く。'],
+  async pi=>{G.p[pi].bz.filter(x=>D(x).type==='c').forEach(x=>setU(x,'wbreaker',pi));log('このターン、自分のクリーチャーはすべて「W・ブレイカー」を得た');render();await q24ownShieldGrave(pi);});
+BC('c1104','爆炎野郎ジョー','火',3,3000,'ヒューマノイド',[],[]);
+BC('c1105','チッチ・ホッピー','火',3,2000,'ファイアー・バード',[],[q24ALLM('火','このクリーチャーのパワーは+2000される。')],{powerPlus:c=>q24allMana(c.owner,'火')?2000:0});
+BC('c1106','奇襲兵ブルレイザー','火',2,3000,'ドラゴノイド',[],['バトルゾーンにある相手のクリーチャーの数が自分のクリーチャーの数より多いとき、このクリーチャーは攻撃することができない。'],
+  {canAtkIf:c=>G.p[1-c.owner].bz.filter(x=>D(x).type==='c').length<=G.p[c.owner].bz.filter(x=>D(x).type==='c').length});
+BS('c1107','ボルカニック・アロー','火',2,[STT,'バトルゾーンにあるパワー6000以下のクリーチャーを1体選び、持ち主の墓地に置く。','自分のシールドが1枚でもあれば、裏向きのまま1枚選び、自分の墓地に置く。'],
+  async pi=>{const t=await choose(pi,'墓地に置くパワー6000以下のクリーチャー',anyCr(pi).filter(x=>D(x).type==='c'&&pow(x)<=6000),l=>[...l].filter(y=>y.owner!==pi).sort((a,b)=>cmp(wp(b),wp(a)))[0]||weakPick(l));if(t)await destroy(t.owner,t);if(G.over)return;await q24ownShieldGrave(pi);},{st:true});
+BC('c1108','激昂するダッシュ・ホーン','自然',5,4000,'ホーン・ビースト',[],[q24ALLM('自然','このクリーチャーのパワーは+3000され、「W・ブレイカー」を得る。（シールドを攻撃したとき、このクリーチャーはシールドを2枚ブレイクする）')],
+  {powerPlus:c=>q24allMana(c.owner,'自然')?3000:0,grant:{wbreaker:(x,c)=>c===x&&q24allMana(x.owner,'自然')}});
+BC('c1109','ソード・バタフライ','自然',3,2000,'ジャイアント・インセクト',[],[PA(3000)],{powerAtk:3000});
+BC('c1110','スナイプ・モスキート','自然',1,2000,'ジャイアント・インセクト',[],['このクリーチャーが攻撃するとき、自分のマナゾーンにカードが1枚でもあれば、その中から1枚選び、自分の手札に戻す。'],
+  {async onAttack(pi){await q24manaPickHand(pi,null,'マナゾーンから手札に戻すカード');}});
+BS('c1111','大地の咆哮','自然',2,[STT,'自分のマナゾーンから、コスト6以上のクリーチャーを1体選び、自分の手札に戻す。'],async pi=>{await q24manaPickHand(pi,x=>DEFS[x.id].type==='c'&&DEFS[x.id].cost!==INF&&DEFS[x.id].cost>=6,'マナゾーンから手札に戻すコスト6以上のクリーチャー');},{st:true});
+
+/* 魔流毒：闇のクリーチャーがいなければ唱えられない */
+{const _sb=spellBanned;spellBanned=function(pi,sd){if(sd&&sd.castNeed&&G&&G.p&&!sd.castNeed(pi))return true;return _sb(pi,sd);};}
+/* クリーチャーを攻撃できない */
+{const _am=atkMode;atkMode=function(c){const m=_am(c);if(m&&!ignored(c)&&D(c).noAtkCr){if(m==='creature')return '';return 'player';}return m;};}
+
+UI.offCache={};
+CARD_IDS=Object.keys(DEFS).filter(k=>!DEFS[k].gr&&!DEFS[k].hidden).sort((a,b)=>+a.slice(1)-+b.slice(1));
 
 /* ===== オンライン通信（共有データベース） ===== */
 const CODE_CHARS='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
