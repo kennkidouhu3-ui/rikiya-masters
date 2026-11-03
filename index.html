@@ -940,8 +940,8 @@ function hasBlocker(c){return !revLocked(c)&&!(G.oneAtk&&G.oneAtk.some(l=>l.t===
 function winsAll(x){if(ignored(x))return false;if(D(x).winAll||x.winT===G.turnNo)return true;return isDragon(x)&&G.p[x.owner].bz.some(t=>t.hyper&&D(t).hyper&&D(t).hyper.dragonWin&&!ignored(t));}
 function breakCount(c){
   let n=1;
-  if(hasKw(c,'powered'))n=Math.max(1,Math.floor(pow(c)/6000));
-  else if(hasKw(c,'qbreaker'))n=4;else if(hasKw(c,'tbreaker'))n=3;else if(hasKw(c,'wbreaker'))n=2;
+  if(hasKw(c,'qbreaker'))n=4;else if(hasKw(c,'tbreaker'))n=3;else if(hasKw(c,'wbreaker'))n=2;
+  if(hasKw(c,'powered')){const p=pow(c);const pn=p===INF?99:Math.floor(Math.max(0,p)/6000)+1;n=Math.max(n,pn);}
   n+=c.extraBreak||0;
   if(isLinked(c))n+=linkMembers(c).filter(x=>D(x).linkBreak&&!ignored(x)).length;
   return n;
@@ -1333,6 +1333,7 @@ async function draw(pi,n){
     if(!P.deck.length&&P.bz.some(x=>D(x).bigBang&&!ignored(x))){const L=P.grave.filter(y=>nonEvo(y)&&!putBlocked(pi,y));const x=await choose(pi,'ブラック・ビッグバン：山札がないので、かわりに墓地から出すクリーチャー',L,bigPick,true);if(x)await putFrom(pi,x,'grave');else log('ブラック・ビッグバン：山札がなくてもゲームに負けない');continue;}
     if(!P.deck.length){await win(1-pi,`${P.name}の山札がなくなりました`);return false;}
     const cd=P.deck.pop();P.hand.push(cd);G.drawnT=G.drawnT||[0,0];G.drawnT[pi]++;
+    if(!P.deck.length){G.drawOut=pi;try{await deckOutCheck();}finally{G.drawOut=null;}if(G.over)return false;}
     if(!G.elecBusy&&P.deck.length&&P.bz.some(x=>x.hyper&&D(x).hyper&&D(x).hyper.elec&&!ignored(x))){G.elecBusy=true;let y=false;try{y=await askYN(pi,'エレクトロン：かわりにカードを2枚引きますか？',null,P.deck.length>8);}finally{G.elecBusy=false;}if(y){const c2=P.deck.pop();P.hand.push(c2);G.drawnT[pi]++;log('エレクトロン：かわりに2枚引いた');}}
     if(G.cur===pi&&!G.tsuBusy&&P.shields.some(s=>s.up&&DEFS[s.id].tsunami)&&G.p[1-pi].hand.length){G.tsuBusy=true;try{log('ブルー・ツナミ：カードを引いたので、相手は手札を1枚捨てる');await oppChooseDiscard(pi,1);}finally{G.tsuBusy=false;}if(G.over)return false;}
     if(G.drawnT[pi]>=2&&!G.vamBusy&&G.p[1-pi].bz.some(x=>x.hyper&&D(x).hyper&&D(x).hyper.vamilia&&!ignored(x))){G.vamBusy=true;try{log('ヴァミリア・バレル：2枚目以降を引いたので、手札を1枚捨てる');await discardN(pi,1);}finally{G.vamBusy=false;}if(G.over)return false;}
@@ -2314,15 +2315,15 @@ async function sBack(pi,broken){
     await playCard(pi,h,{free:true,from:'hand',face:'c',via:'sback'});
   }
 }
-async function ninjaStrike(di,flags){
-  if(flags.ninja)return;
+async function ninjaStrike(di,flags,key){
+  key=key||'ninja';if(flags[key])return;
   const P=G.p[di];
   const cands=P.hand.filter(x=>{const n=D(x).ninja;if(!n||D(x).type!=='c'||putBlocked(di,x))return false;return P.mana.length>=n.n&&n.civs.every(v=>P.mana.some(m=>mCiv(m).includes(v)));});
   for(const card of cands){
     if(G.over)return;
     const yes=await askYN(di,`ニンジャ・ストライク！ 『${nameOf(card)}』をコストを支払わずに召喚しますか？`,card,true);
     if(!yes)continue;
-    flags.ninja=true;
+    flags[key]=true;
     for(const x of [...P.bz]){if(G.over)break;if(!ignored(x)&&D(x).onMyNinja)await D(x).onMyNinja(di,x);}
     await playCard(di,card,{free:true,from:'hand',face:'c',via:'ninja'});
     const c=findBz(card.uid);
@@ -2415,15 +2416,15 @@ async function attack(ai,a,t){
   const first=G.atkN[ai]===1;G.atkTgt=t;if(pow(a)>=12000){G.p12=G.p12||[null,null];G.p12[ai]=G.turnNo;}
   log(`${P.name}の『${nameOf(a)}』が${t.kind==='creature'?`『${nameOf(t.c)}』`:t.kind==='shield'?'シールド':'プレイヤー'}を攻撃！`);render();await sleep(550);
   try{
+    await onTappedHook(ai,a);if(G.over||!P.bz.includes(a))return;
+    /* 攻撃する時の能力：攻撃を宣言したクリーチャーのものだけがトリガーする（革命チェンジ・侵略などで後から出たクリーチャーの「攻撃する時」はトリガーしない） */
+    if(!ignored(a)&&D(a).onAttack){await D(a).onAttack(ai,a);if(G.over||!P.bz.includes(a))return;}
+    for(const x of linkMembers(a)){if(x===a||ignored(x)||!D(x).onAttack||!P.bz.includes(x))continue;await D(x).onAttack(ai,x);if(G.over||!P.bz.includes(a))return;}
     a=await tryRevChange(ai,a);G.atkUid=a.uid;
     if(G.over)return;
     a=await tryJSwap(ai,a);G.atkUid=a.uid;a.brk=false;
     if(!G.over&&P.bz.includes(a)){a=await tryInvade(ai,a);G.atkUid=a.uid;}
     if(G.over||!P.bz.includes(a))return;
-    await onTappedHook(ai,a);if(G.over||!P.bz.includes(a))return;
-    /* 攻撃する時の能力 */
-    if(!ignored(a)&&D(a).onAttack){await D(a).onAttack(ai,a);if(G.over||!P.bz.includes(a))return;}
-    for(const x of linkMembers(a)){if(x===a||ignored(x)||!D(x).onAttack||!P.bz.includes(x))continue;await D(x).onAttack(ai,x);if(G.over||!P.bz.includes(a))return;}
     for(const u of (a.under||[])){
       if(ignored(a))break;
       if(D(u).chokon){await chokonRun(ai,a,D(u).cost);if(G.over||!P.bz.includes(a))return;}
@@ -2518,6 +2519,7 @@ async function attack(ai,a,t){
           if(D(b).onBlock&&!ignored(b)&&O.bz.includes(b)){await D(b).onBlock(1-ai,b,a);if(G.over||!O.bz.includes(b)||!P.bz.includes(a))return;}
           if(!ignored(a)&&D(a).onBlocked){await D(a).onBlocked(ai,a,b);if(G.over||!O.bz.includes(b)||!P.bz.includes(a))return;}
           if(a.hyper&&D(a).hyper&&D(a).hyper.blockedDiscard&&!ignored(a)&&O.hand.length){log('オブリ&レイト：ブロックされたので、相手は手札を3枚捨てる');await oppChooseDiscard(ai,3);if(G.over)return;}
+          await ninjaStrike(ai,flags,'ninjaA');if(G.over||!O.bz.includes(b)||!P.bz.includes(a))return;
           await uraNinja(ai,flags,'block');if(G.over||!O.bz.includes(b)||!P.bz.includes(a))return;if(!O.bz.includes(b)||!P.bz.includes(a))return;await battle(ai,a,1-ai,b);return;}
       }
     }
@@ -2541,7 +2543,7 @@ function targetOptions(pi,a){
   const O=G.p[1-pi],mode=atkMode(a);
   const smaller=x=>D(x).noAtkBySmaller&&!ignored(x)&&cmp(pow(a),pow(x))<0;
   const af=hasKw(a,'flying');
-  const au=(!!D(a).atkUntapped&&!ignored(a))||hasU(a,'atkUntapped')||(!!G.untAtk&&G.untAtk[pi]===G.turnNo);
+  const au=(!!D(a).atkUntapped&&!ignored(a))||hasU(a,'atkUntapped')||(!!G.untAtk&&G.untAtk[pi]===G.turnNo)||(hasKw(a,'mach')&&a.et===G.turnNo);
   const chaos=x=>!!G.chaos&&G.chaos.t===G.turnNo&&G.chaos.pi===pi&&G.chaos.uid===x.uid;
   const ponly=mode==='player';
   const gprot=x=>O.bz.some(y=>D(y).waterProt&&!ignored(y))&&G.p[pi].shields.length<=2&&civOf(x).includes('水');
@@ -3308,7 +3310,16 @@ async function powMod(t,v){
   await zeroCheck();
 }
 /* 状況起因処理：パワー0以下のクリーチャーを破壊（EXライフなどで残ったら、もう一度確認） */
+/* ライブラリアウト（状況起因処理）：山札が0枚になったプレイヤーは負ける */
+async function deckOutCheck(){
+  if(!G||G.over||!G.p||G.doBusy)return;G.doBusy=true;
+  try{for(const q of [G.cur,1-G.cur]){if(G.over)return;const P=G.p[q];if(!P||!P.deck||P.deck.length)continue;
+    if(P.bz.some(x=>D(x).bigBang&&!ignored(x)))continue;
+    if((G.noLoseP&&G.noLoseP[q])||(G.noLoseT&&G.noLoseT[q]===G.turnNo)){G.doLog=G.doLog||{};const k=q+':'+G.turnNo;if(G.doLog[k])continue;G.doLog[k]=1;}
+    await win(1-q,`${P.name}の山札がなくなりました`);}}finally{G.doBusy=false;}
+}
 async function zeroCheck(){
+  await deckOutCheck();if(G.over)return;
   if(G.zcBusy)return;G.zcBusy=true;
   try{for(let k=0;k<20&&!G.over;k++){const L=[0,1].flatMap(q=>G.p[q].bz.filter(x=>D(x).type==='c'&&((x.zeroT===G.turnNo)||(pow(x)!==INF&&pow(x)<=0))).map(x=>[q,x]));if(!L.length)break;for(const [q,x] of L)log(`『${nameOf(x)}』はパワーが0以下なので破壊される`);const before=L.map(([q,x])=>x);await massDestroy(L);if(before.every(x=>G.p[x.owner].bz.includes(x))&&k>0)break;}}finally{G.zcBusy=false;}
 }
@@ -4664,7 +4675,7 @@ DEFS.c167={name:'クリム・美心・ギャラクシー＜アガる！＞',civ:
 DEFS.c168={name:'真久間メガ＜ボクにおまかせ！＞',civ:['火'],cost:7,power:6000,type:'c',race:['メガ・コマンド・ドラゴン','生徒会組','革命軍'],kw:['gstrike','powered'],
   grant:{sa:(x,c)=>hasR(c,'生徒会組')},
   powerPlus:c=>G.cur===c.owner?6000*G.p[c.owner].bz.filter(x=>x!==c&&hasR(x,'生徒会組')).length:0,
-  txt:['G・ストライク','パワード・ブレイカー（このクリーチャーは、パワー6000ごとにシールドを1つブレイクする）','自分の生徒会組すべてに「スピードアタッカー」を与える。','自分のターン中、自分の他の生徒会組1つにつき、このクリーチャーのパワーを+6000する。','各ターンに1度、自分のドラゴンが出た時、相手のクリーチャーを1体選んでもよい。その選んだクリーチャーとこのクリーチャーをバトルさせる。'],
+  txt:['G・ストライク','パワード・ブレイカー（このクリーチャーは、パワー6000ごとにシールドをさらに1つブレイクする）','自分の生徒会組すべてに「スピードアタッカー」を与える。','自分のターン中、自分の他の生徒会組1つにつき、このクリーチャーのパワーを+6000する。','各ターンに1度、自分のドラゴンが出た時、相手のクリーチャーを1体選んでもよい。その選んだクリーチャーとこのクリーチャーをバトルさせる。'],
   async onMyDragonEnter(pi,c){if(!targetable(pi).length)return;c.dragT=G.turnNo;await battleOpp(pi,c);}};
 
 /* ダイジュ・ディダノスの手札破壊も「相手の効果」として扱う */
@@ -5382,7 +5393,7 @@ DEFS.c243={name:'嵐神 ミヅハノクエビコ',civ:['水'],cost:5,power:8000,
 
 DEFS.c244={name:'邪眼破壊神R・R・R',civ:['闇'],cost:5,power:8000,type:'c',race:['ゴッド・ガルド','ダークロード','ナイト'],kw:['powered'],
   evo:{kind:'one',zone:'grave',test:x=>civOf(x).includes('闇'),label:'墓地進化：自分の墓地にある闇のクリーチャー'},
-  txt:['墓地進化：自分の墓地にある闇のクリーチャー1体の上に重ねつつ出す。','パワード・ブレイカー（パワー6000ごとにシールドを1つブレイクする）','このクリーチャーが攻撃する時、このクリーチャーに含まれるカード1枚につき、相手の手札を1枚見ないで選び、捨てさせる。',GLINK],
+  txt:['墓地進化：自分の墓地にある闇のクリーチャー1体の上に重ねつつ出す。','パワード・ブレイカー（パワー6000ごとにシールドをさらに1つブレイクする）','このクリーチャーが攻撃する時、このクリーチャーに含まれるカード1枚につき、相手の手札を1枚見ないで選び、捨てさせる。',GLINK],
   async onAttack(pi,c){const n=1+(c.under||[]).length;log(`R・R・R：${n}枚、相手の手札を捨てさせる`);await blindDiscard(pi,n);}};
 
 DEFS.c245={name:'～墓碑に刻まれし魔弾の名～',civ:['闇'],cost:4,power:4000,type:'c',race:['ダークロード','ドラゴン・ゾンビ','スチーム・ナイト','フュージョナー'],chokonX:true,
@@ -9137,7 +9148,7 @@ DEFS.c740={name:'水上第九院 シャコガイル',civ:['水'],cost:9,power:13
   txt:['T・ブレイカー','このクリーチャーが出た時、自分の墓地を山札に加えてシャッフルする。','相手のターンのはじめに、カードを5枚引き、自分の手札を3枚捨てる。','自分の山札の最後の1枚を引いたことによって自分がゲームに負ける時、かわりに勝つ。'],
   async onEnter(pi){const P=G.p[pi];const n=P.grave.length;P.grave.splice(0).forEach(x=>P.deck.push(plain(x)));shuffle(P.deck);log(`墓地${n}枚を山札に加えてシャッフルした`);render();},
   async oppStartFx(pi){await draw(pi,5);if(!G.over)await discardN(pi,3);},
-  async loseSave(li,c,msg){if(!/山札/.test(msg))return false;log('シャコガイル：山札の最後の1枚を引いたことで負けるかわりに、勝つ！');await win(li,'シャコガイルの効果');return true;}};
+  async loseSave(li,c,msg){if(!/山札/.test(msg)||G.drawOut!==li)return false;log('シャコガイル：山札の最後の1枚を引いたことで負けるかわりに、勝つ！');await win(li,'シャコガイルの効果');return true;}};
 /* 山札を引き切った時もシャコガイルを確認する */
 {const _dr=draw;draw=async function(pi,n){for(let i=0;i<n;i++){const P=G.p[pi];const r=await _dr(pi,1);if(r===false)return false;if(G.over)return r;if(!P.deck.length&&P.bz.some(x=>x.id==='c740'&&!ignored(x))){log('シャコガイル：山札の最後の1枚を引いた！');await win(pi,'シャコガイルの効果（山札の最後の1枚を引いた）');return true;}}return true;};}
 
