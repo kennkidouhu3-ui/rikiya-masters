@@ -272,6 +272,30 @@ button.big{font-size:18px;padding:14px 22px;margin-top:6px}
 .mh{font-size:22px;margin:6px 0 4px}
 .msub{color:var(--muted);font-size:13px;margin:0 0 12px;line-height:1.5}
 .mstart{display:block;margin:14px auto 6px;width:100%;max-width:420px}
+/* マイデッキ */
+.dktop{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left}
+.dktop.sticky{position:sticky;top:0;z-index:20;background:var(--bg);padding:6px 0;border-bottom:1px solid var(--line);margin:-4px 0 8px}
+.dksave{font-size:13px;color:var(--ok);font-weight:700}
+.dkedhead{display:flex;align-items:center;gap:8px;margin:4px 0 10px;text-align:left}
+.dkedhead label{font-size:13px;color:var(--muted);flex:0 0 auto}
+.dkedhead input{flex:1}
+.dklist{text-align:left}
+.dkh{font-size:18px;margin:22px 0 4px}
+.dkmsg{background:var(--panel2);border-radius:10px;padding:8px 12px;font-size:14px;font-weight:700}
+.dkrows{display:flex;flex-direction:column;gap:10px}
+.dkrow{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px}
+.dkrow.cur{border:2px solid var(--btn)}
+.dkr1{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dkname{font-size:17px}
+.dkuse{font-size:12px;background:var(--btn);color:var(--btnink);border-radius:999px;padding:2px 10px;font-weight:700}
+.dkr2{margin:4px 0 8px;display:flex;gap:8px;flex-wrap:wrap}
+.dkn{font-size:13px;font-weight:700}.dkn.ok{color:var(--ok)}.dkn.ng{color:var(--danger)}
+.dksh{font-size:12px;color:var(--accent);font-weight:700}
+.dkr3{display:flex;gap:6px;flex-wrap:wrap}
+.dkr3 button{padding:8px 12px;font-size:14px}
+.dknew{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+.dknew .big{width:100%}
+.dkoff{display:flex;gap:6px}.dkoff select{flex:1;min-width:0}
 
 </style>
 </head>
@@ -11012,6 +11036,65 @@ titleHTML=function(){
   <p class="note">デュエル・マスターズのルールで遊ぶ、非公式のファンメイド対戦アプリです。収録カードは全${CARD_IDS.length}種。</p></div>`;
 };
 try{if((UI.screen==='title'||!UI.screen)&&!G)render();}catch(e){}
+
+/* ===== マイデッキ画面（一覧 → 編集） ===== */
+{const _sd=saveDeck;saveDeck=function(){_sd();UI.savedAt=Date.now();};}
+function dkUseMine(){if(UI.pSel){UI.pSel='';if(typeof saveSel==='function')saveSel();}}
+function dkGo(v){UI.dview=v;UI.clearArm=false;UI.delArm=false;UI.dlDel=null;render();window.scrollTo(0,0);}
+function dkEdit(i){selectDeck(i);dkUseMine();UI.screen='deck';UI.dfrom='list';UI.dtab='pick';dkGo('edit');}
+function dkUse(i){selectDeck(i);dkUseMine();UI.dlMsg=`「${UI.decks[i].name}」を対戦で使うデッキにしました`;render();}
+function dkNew(){if(!newDeck(false))return;dkUseMine();UI.dfrom='list';UI.dtab='pick';dkGo('edit');}
+function dkCopy(i){selectDeck(i);if(!newDeck(true))return;UI.dlMsg=`「${UI.decks[UI.dcur].name}」を作りました`;render();}
+function dkDel(i){if(UI.dlDel!==i){UI.dlDel=i;render();return;}UI.dlDel=null;const nm=UI.decks[i].name;selectDeck(i);deleteDeck();UI.dlMsg=`「${nm}」を削除しました`;render();}
+function dkFromOfficial(){const s=document.getElementById('dkoff');if(!s||s.value==='')return;if(UI.decks.length>=MAX_DECKS){alert('マイデッキがいっぱいです（12個まで）。どれかを削除してから試してください。');return;}
+  const i=+s.value;const ids=officialIds(i);const cards={};ids.forEach(id=>cards[id]=(cards[id]||0)+1);saveDeck();UI.decks.push({name:OFFICIAL_DECKS[i].n.slice(0,20),cards});UI.dcur=UI.decks.length-1;UI.myDeck=Object.assign({},cards);saveDeck();dkUseMine();UI.dlMsg=`おすすめデッキ「${OFFICIAL_DECKS[i].n}」をマイデッキに入れました`;render();}
+function dkShare(i){selectDeck(i);shareCurrent();}
+function deckDone(){if(UI.dfrom==='list'){dkGo('list');UI.dlMsg=`「${UI.decks[UI.dcur].name}」を保存しました`;render();return;}UI.screen='title';render();window.scrollTo(0,0);}
+function dkMenu(){UI.screen='title';UI.menu=null;render();window.scrollTo(0,0);}
+function dkSavedTxt(){const t=UI.savedAt;if(!t)return '✓ 自動で保存されます';const s=Math.round((Date.now()-t)/1000);return s<3?'✓ 保存しました':'✓ 保存ずみ';}
+
+function deckListHTML(){
+  if(!UI.myDeck)loadDeck();saveDeck();
+  const useMine=!UI.pSel;
+  const rows=UI.decks.map((d,i)=>{const n=deckCount(d.cards),ok=n===DECK_SIZE,cur=i===UI.dcur&&useMine;
+    const shared=!!(d.sid&&SHARE.on&&SHARE.decks[d.sid]);
+    return `<div class="dkrow ${cur?'cur':''}">
+      <div class="dkr1"><b class="dkname">${esc(d.name)}</b>${cur?'<span class="dkuse">★ 対戦で使うデッキ</span>':''}</div>
+      <div class="dkr2"><span class="dkn ${ok?'ok':'ng'}">${ok?'✓ 40枚（完成）':`${n}枚（あと${DECK_SIZE-n>0?DECK_SIZE-n+'枚':'—'}）`}</span>${shared?'<span class="dksh">みんなに共有中</span>':''}</div>
+      <div class="dkr3"><button class="primary" onclick="dkEdit(${i})">編集する</button>
+        ${cur?'':`<button onclick="dkUse(${i})" ${ok?'':'disabled'}>このデッキを使う</button>`}
+        <button class="ghost" onclick="dkCopy(${i})" ${UI.decks.length>=MAX_DECKS?'disabled':''}>コピー</button>
+        ${SHARE.on&&!shared?`<button class="ghost" onclick="dkShare(${i})">みんなに共有</button>`:''}
+        <button class="ghost dclr" onclick="dkDel(${i})">${UI.dlDel===i?'もう一度押すと削除':'削除'}</button></div></div>`;}).join('');
+  const full=UI.decks.length>=MAX_DECKS;
+  const offs=OFFICIAL_DECKS.map((d,i)=>`<option value="${i}">${esc(d.n)}</option>`).join('');
+  let shared='';
+  if(SHARE.on){const L=shareList();shared=`<h3 class="dkh">みんなのデッキ（共有）</h3><p class="note">ここにあるデッキは、このURLを開いた全員が見られます。「自分のデッキに入れる」でマイデッキにコピーできます。</p>
+    ${L.length?L.map(([sid,sd])=>{const n=shareCount(sd);const has=(UI.decks||[]).some(x=>x.sid===sid);return `<div class="dkrow sh"><div class="dkr1"><b class="dkname">${esc(sd.name)}</b></div><div class="dkr2"><span class="dkn ${n===DECK_SIZE?'ok':'ng'}">${n}枚</span></div><div class="dkr3"><button onclick="shareImport('${sid}');UI.dlMsg='マイデッキに入れました';render()">${has?'最新にする':'自分のデッキに入れる'}</button><button class="ghost dclr" onclick="shareDelete('${sid}')">${SHARE.delArm===sid?'もう一度押すと共有から削除':'共有から削除'}</button></div></div>`;}).join(''):'<p class="note">まだ共有されたデッキはありません</p>'}`;}
+  else shared=`<h3 class="dkh">みんなのデッキ（共有）</h3><p class="note">${SHARE.err?esc(SHARE.err):'GitHub Pagesのページで開くと使えます（読み込み中の場合もあります）'}</p>`;
+  return `<div class="title deckscr dklist">
+    <div class="dktop"><button class="mback" onclick="dkMenu()">← メニューにもどる</button></div>
+    <h2 class="mh">マイデッキ</h2>
+    <p class="msub">デッキはこの端末に<b>自動で保存</b>されます（保存ボタンはありません）。「★ 対戦で使うデッキ」が、CPU対戦・友だち対戦で使われます。</p>
+    ${UI.dlMsg?`<p class="dkmsg">${esc(UI.dlMsg)}</p>`:''}
+    <div class="dkrows">${rows}</div>
+    <div class="dknew"><button class="primary big" onclick="dkNew()" ${full?'disabled':''}>＋ 新しいデッキを作る（空っぽから）</button>
+      <div class="dkoff"><select id="dkoff" class="dkselect"><option value="">おすすめデッキから作る…</option>${offs}</select><button onclick="dkFromOfficial()" ${full?'disabled':''}>マイデッキに入れる</button></div>
+      <p class="note">マイデッキは${MAX_DECKS}個まで作れます（いま${UI.decks.length}個）。</p></div>
+    ${shared}</div>`;
+}
+{const _dh=deckHTML;deckHTML=function(){
+  if(UI.dview!=='edit')return deckListHTML();
+  let h=_dh();const k=h.indexOf('<div class="dhead">');if(k>=0)h=h.slice(k);
+  h=h.replace('<button class="primary" data-do="deckdone">できた</button>','<button class="primary" onclick="deckDone()">できた</button>');
+  const d=UI.decks[UI.dcur];const n=deckTotal();
+  const top=`<div class="dktop sticky"><button class="mback" onclick="deckDone()">← ${UI.dfrom==='list'?'デッキ一覧':'もどる'}</button><span class="dksave">${dkSavedTxt()}</span><button class="mback" onclick="dkMenu()">メニュー</button></div>
+    <div class="dkedhead"><label for="dname">デッキの名前</label><input id="dname" class="dq" maxlength="20" value="${esc(d.name)}" autocomplete="off"></div>`;
+  return `<div class="title deckscr dked">${top}${h}`;
+};}
+/* メニューの「マイデッキ」は一覧へ、他の画面の「編集」は編集画面へ */
+{const _t=titleHTML;titleHTML=function(){return _t().replace('<button class="mtile t3" data-do="deckedit">','<button class="mtile t3" onclick="UI.dview=\'list\';UI.dlMsg=\'\';UI.screen=\'deck\';if(!UI.myDeck)loadDeck();render();window.scrollTo(0,0)">').replace(/<button data-do="deckedit">/g,'<button onclick="dkEdit(UI.dcur);UI.dfrom=\'title\';render()">');};}
+try{if(UI.screen==='title'&&!G)render();}catch(e){}
 
 </script>
 </body>
