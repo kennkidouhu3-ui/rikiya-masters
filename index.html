@@ -1275,7 +1275,7 @@ function playOptions(pi,card,zone){
     if(d.type==='c'&&(d.fromGrave||zeire))out.push({key:'c',label:'墓地から召喚する',why:castReason(pi,card,'c','grave')});
     if(hasR(card,'デモニオ')&&P.bz.some(x=>x.hyper&&D(x).hyper&&D(x).hyper.graveDemonio&&!ignored(x))&&G.jaoUsed[pi]!==G.turnNo)
       out.push({key:'jao',label:'ジャオウガ-8（ハイパーモード）：墓地から実行する',why:castReason(pi,card,'c','grave')});
-    if(d.type==='c'&&!d.fromGrave&&G.cur===pi&&G.eddyT!==G.turnNo&&P.bz.some(x=>!ignored(x)&&(D(x).eddy||(x.under||[]).some(u=>DEFS[u.id].eddy))))out.push({key:'eddy',label:'墓地から召喚する（各ターン1回・コストは支払う）',why:castReason(pi,card,'c','grave')});
+    if(d.type==='c'&&!d.fromGrave&&G.cur===pi&&G.eddyT!==G.turnNo&&P.bz.some(x=>!ignored(x)&&(D(x).eddy||(D(x).eddyIf&&D(x).eddyIf(card))||(x.under||[]).some(u=>DEFS[u.id].eddy))))out.push({key:'eddy',label:'墓地から召喚する（各ターン1回・コストは支払う）',why:castReason(pi,card,'c','grave')});
     if(d.graveAlt)out.push({key:'galt',label:d.graveAlt.label,why:d.graveAlt.why(pi,card)});
     if(d.abyssRush||(d.type==='c'&&hasR(card,'アビス')&&P.bz.some(x=>D(x).grantAbyss&&!ignored(x))))out.push({key:'abyss',label:'アビスラッシュ：墓地から召喚（プレイヤーを攻撃でき、ターンの終わりに山札の下へ）',why:castReason(pi,card,'c','grave')});
     if(d.fushigi)out.push({key:'fushigi',label:`フシギバース${d.fushigi}：自分のクリーチャー1体をマナに置いて、墓地から召喚`,why:putBlocked(pi,card)?'今は出せません':(fushigiCands(pi,card).length?'':'条件を満たすクリーチャーかマナがありません')});
@@ -10367,6 +10367,25 @@ DEFS.c1124={name:'勝熱英雄 モモキング',civ:['火','自然'],cost:8,powe
   txt:['キリフダッシュ6（自分のクリーチャーの攻撃の終わりに、そのクリーチャーがその攻撃中にシールドをブレイクしていれば、このクリーチャーを6支払って召喚してもよい）','スピードアタッカー','T・ブレイカー','各ターン、このクリーチャーがはじめて攻撃する時、その攻撃の後、このクリーチャーをアンタップする。','相手は、多色ではない、クリーチャーの能力または呪文でこのクリーチャーを選べない。'],
   async onAttack(pi,c){if(c.atkN===1)c.uaf=true;}};
 
+UI.offCache={};
+CARD_IDS=Object.keys(DEFS).filter(k=>!DEFS[k].gr&&!DEFS[k].hidden).sort((a,b)=>+a.slice(1)-+b.slice(1));
+
+/* ===== カードデータ（ルピア c1125〜c1128） ===== */
+DEFS.c1125={name:'ダーク・鎌・ルピア',civ:['火'],cost:4,power:5000,type:'c',race:['アーマード・ファイアー・バード','ドラゴン・ゾンビ'],kw:[],
+  txt:['自分のドラゴン・クリーチャーの召喚コストを2少なくする。ただし、コストは0以下にはならない。','各ターンに一度、自分の墓地からドラゴン・クリーチャーを1体召喚してもよい。'],
+  allRed:(pi,card)=>isDragon(card)?2:0,eddyIf:card=>isDragon(card)};
+DEFS.c1126={name:'ハンプティ・ルピア',civ:['光','火'],cost:3,power:3500,type:'c',race:['アーマード・ファイアー・バード'],kw:['gstrike'],
+  txt:['G・ストライク（このクリーチャーを自分のシールドゾーンから手札に加える時、表向きにし、相手のクリーチャーを1体選んでもよい。このターン、そのクリーチャーは攻撃できない）','このクリーチャーが出た時、相手の手札を見て1枚選び、捨てさせる。その後、その捨てた手札と同じコストを持つ相手のクリーチャーを1体選び、破壊する。'],
+  async onEnter(pi){const O=G.p[1-pi];if(!O.hand.length)return;
+    const x=await choose(pi,'相手の手札から捨てさせるカード',O.hand,l=>{const cs=new Set(O.bz.filter(y=>D(y).type==='c').map(y=>cc(y)));return l.find(y=>cs.has(cc(y)))||bigPick(l);});
+    if(!x)return;const co=cc(x);await discardCard(1-pi,x);log(`ハンプティ・ルピア：相手の『${nameOf(x)}』（コスト${co===INF?'∞':co}）を捨てさせた`);if(G.over)return;
+    if(!targetable(pi).some(y=>cc(y)===co))return;const t=await chooseOpp(pi,`破壊するコスト${co===INF?'∞':co}の相手のクリーチャー`,y=>cc(y)===co);if(t)await destroy(1-pi,t);}};
+DEFS.c1127={name:'ダーク・ルピア',civ:['闇'],cost:3,power:1000,type:'c',race:['ファイアー・バード'],kw:[],
+  txt:['自分のドラゴンが破壊された時、相手のクリーチャーを1体破壊してもよい。'],
+  async onMyDestroyed(pi,x,c){if(!isDragon(c)||!targetable(pi).length)return;const t=await chooseOpp(pi,'ダーク・ルピア：破壊する相手のクリーチャー',()=>true,strongPick,true);if(t)await destroy(1-pi,t);}};
+DEFS.c1128={name:'ルピア&ガ:ナテハ',civ:['無'],cost:2,power:2000,type:'c',race:['アーマード・ファイアー・バード','ノワールアビス'],kw:[],
+  txt:['自分のターンの終わりに、自分のシールドを1つ墓地に置く。その後、カードを1枚引く。'],
+  async endFx(pi){await q24ownShieldGrave(pi);if(G.over)return;await draw(pi,1);}};
 UI.offCache={};
 CARD_IDS=Object.keys(DEFS).filter(k=>!DEFS[k].gr&&!DEFS[k].hidden).sort((a,b)=>+a.slice(1)-+b.slice(1));
 
