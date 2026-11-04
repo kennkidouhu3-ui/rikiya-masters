@@ -2458,16 +2458,18 @@ async function majiBomber(pi,c,n){
   const p=await pickZ(pi,`マジボンバー${n}：コスト${n}以下のクリーチャーを手札または山札の上から出す`,L,bigPick,true);
   if(p)await putFrom(pi,p.card,p.z);
 }
-function kfN(pi,h){const d=D(h);let n=d.kirifuda||0;for(const x of G.p[pi].bz){if(ignored(x)||!D(x).giveKirifuda)continue;const v=D(x).giveKirifuda(h);if(v&&(!n||v<n))n=v;}return n;}
+/* キリフダッシュのコストと、支払う文明（カード内のキリフダッシュの丸の色） */
+function kfOpt(pi,h){const d=D(h);let o=d.kirifuda?{n:d.kirifuda,civ:d.kfCiv||civsOf(d)}:null;for(const x of G.p[pi].bz){if(ignored(x)||!D(x).giveKirifuda)continue;const v=D(x).giveKirifuda(h);if(v&&(!o||v.n<o.n))o=v;}return o;}
+function kfN(pi,h){const o=kfOpt(pi,h);return o?o.n:0;}
 async function kirifudaCheck(ai,a){
   const P=G.p[ai];
   for(const h of [...P.hand]){
     if(G.over)return;
-    const d=D(h);const kn=kfN(ai,h);if(!kn||d.type!=='c'||!P.hand.includes(h)||putBlocked(ai,h))continue;
-    if(!canPay(ai,kn,civsOf(d)))continue;
+    const d=D(h);const ko=kfOpt(ai,h);const kn=ko?ko.n:0;if(!kn||d.type!=='c'||!P.hand.includes(h)||putBlocked(ai,h))continue;
+    if(!canPay(ai,kn,ko.civ))continue;
     const yes=await askYN(ai,`キリフダッシュ${kn}：『${d.name}』をマナ${kn}で召喚しますか？`,h,true);
     if(!yes)continue;
-    const sel=await pickMana(ai,h,kn,civsOf(d));if(!sel)continue;
+    const sel=await pickMana(ai,h,kn,ko.civ);if(!sel)continue;
     sel.forEach(m=>m.tapped=true);
     log('キリフダッシュ！');
     await playCard(ai,h,{free:true,from:'hand',face:'c',via:'kirifuda'});
@@ -10354,12 +10356,12 @@ DEFS.c1121={name:'勝熱夢双 モモキング',civ:['火','自然'],cost:5,powe
   async onMyAfterAttack(pi,c,a){if(!a.brk||c.ymT===G.turnNo)return;const P=G.p[pi];
     const L=P.hand.filter(h=>DEFS[h.id].type==='c'&&playOptions(pi,h,'hand').some(o=>o.key==='c'&&!o.why));if(!L.length)return;
     const h=await choose(pi,'勝熱夢双 モモキング：コストを支払って召喚するクリーチャー',L,bigPick,true);if(!h)return;c.ymT=G.turnNo;await runPlay(pi,h,'hand','c');}};
-DEFS.c1122={name:'勝熱伝双 モモキングVS',civ:['火','自然'],cost:5,power:9000,type:'c',race:['ジョーカーズ','ヒーロー・ドラゴン','チーム切札'],kw:['sa','wbreaker'],kirifuda:4,fromMana:true,dmrOne:true,
+DEFS.c1122={name:'勝熱伝双 モモキングVS',civ:['光','火','自然'],cost:5,power:9000,type:'c',race:['ジョーカーズ','ヒーロー・ドラゴン','チーム切札'],kw:['sa','wbreaker'],kirifuda:4,fromMana:true,dmrOne:true,
   txt:['キリフダッシュ4（自分のクリーチャーの攻撃の終わりに、そのクリーチャーがその攻撃中にシールドをブレイクしていれば、このカードを4支払って実行してもよい）','このクリーチャーを自分のマナゾーンから召喚してもよい。','スピードアタッカー','W・ブレイカー','このクリーチャーが攻撃する時、自分の他のジョーカーズを1つマナゾーンに置いてもよい。そうしたら、ジョーカーズ・メクレイド8する。','自分の同名のDMRは2つ以上出せない。'],
   async onAttack(pi,c){const P=G.p[pi];const L=[...P.bz,...(P.ts||[])].filter(x=>x!==c&&isJ(x));if(!L.length)return;const x=await choose(pi,'マナゾーンに置く自分の他のジョーカーズ（置いたらジョーカーズ・メクレイド8）',L,weakPick,true);if(!x)return;const ok=await toOwner(x,'mana');if(ok===false||G.over)return;await mekuraid(pi,8,y=>isJ(y),'ジョーカーズ・メクレイド');}};
 DEFS.c1123={name:'勝熱百覇 モモキングReVo',civ:['火','自然'],cost:7,power:11000,type:'c',race:['ヒーロー・ドラゴン','ジョーカーズ','チーム切札'],kw:['sa','wbreaker'],kirifuda:8,
-  txt:['キリフダッシュ8（自分のクリーチャーの攻撃の終わりに、そのクリーチャーがその攻撃中にシールドをブレイクしていれば、このクリーチャーを8支払って召喚してもよい）','スピードアタッカー','W・ブレイカー','自分の手札にあるチーム切札すべてに「キリフダッシュ2」を与える。','キリフダReVo：このクリーチャーが「キリフダッシュ」能力によってバトルゾーンに出た時、自分の山札の上から2枚をマナゾーンに置き、自分のマナゾーンから3枚まで手札に戻し、自分のマナゾーンのカードをすべてアンタップする。'],
-  giveKirifuda:h=>hasR(h,'チーム切札')?2:0,
+  txt:['キリフダッシュ8（自分のクリーチャーの攻撃の終わりに、そのクリーチャーがその攻撃中にシールドをブレイクしていれば、このクリーチャーを8支払って召喚してもよい）','スピードアタッカー','W・ブレイカー','自分の手札にあるチーム切札すべてに「キリフダッシュ2（火/自然）」を与える。','キリフダReVo：このクリーチャーが「キリフダッシュ」能力によってバトルゾーンに出た時、自分の山札の上から2枚をマナゾーンに置き、自分のマナゾーンから3枚まで手札に戻し、自分のマナゾーンのカードをすべてアンタップする。'],
+  giveKirifuda:h=>hasR(h,'チーム切札')?{n:2,civ:['火','自然']}:null,
   async onEnter(pi,c,ctx){if(!ctx||ctx.via!=='kirifuda')return;const P=G.p[pi];log('キリフダReVo！');await manaTop(pi,2);if(G.over)return;
     for(let i=0;i<3&&P.mana.length;i++){const x=await choose(pi,`マナゾーンから手札に戻すカード（${i+1}/3）`,P.mana.map(m=>m.card),bigPick,true);if(!x)break;toHandFrom(pi,x,'mana');}
     P.mana.forEach(m=>m.tapped=false);log('マナゾーンのカードをすべてアンタップした');render();}};
