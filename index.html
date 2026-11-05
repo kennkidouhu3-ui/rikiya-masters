@@ -2776,7 +2776,8 @@ async function startTurn(pi){
   {const lim=O.bz.some(x=>D(x).manaLock3&&!ignored(x));let k=0;P.mana.forEach(m=>{if(m.lock!==undefined||!m.tapped)return;if(lim&&k>=3)return;m.tapped=false;k++;});if(lim)log('ガ・リュザーク：マナは3枚までしかアンタップできない');}
   O.mana.forEach(m=>{if(m.lock===pi)delete m.lock;});
   G.untapPhase=true;P.bz.forEach(c=>{
-    if(!(D(c).pandora&&(c.pile||[]).length<8)&&!hasU(c,'noUntap'))c.tapped=false;
+    if(c.skipUntap){c.skipUntap=false;if(c.tapped)log(`『${nameOf(c)}』はアンタップしない`);}
+    else if(!(D(c).pandora&&(c.pile||[]).length<8)&&!hasU(c,'noUntap'))c.tapped=false;
     c.sick=false;c.dive=false;c.atkN=0;c.usedT=false;
   });G.untapPhase=false;
   if(O.bz.some(x=>D(x).untapLock&&!ignored(x)))P.bz.forEach(c=>{if(!c.tapped){setU(c,'noAtk',1-pi);}});
@@ -3534,7 +3535,7 @@ async function putTotal(pi,zones,f,limit,title){
 async function tapOpp(pi,n,lock){
   let L=targetable(pi).filter(x=>!x.tapped);if(!L.length&&lock)L=targetable(pi);
   const ch=await chooseUpTo(pi,'タップする相手のクリーチャーを選択',L,n);
-  ch.forEach(x=>{x.tapped=true;if(lock)setU(x,'noUntap',pi);log(`『${nameOf(x)}』をタップした${lock?'（次の自分のターンのはじめまでアンタップしない）':''}`);});
+  ch.forEach(x=>{x.tapped=true;if(lock)x.skipUntap=true;log(`『${nameOf(x)}』をタップした${lock?'（次の持ち主のターンのはじめにアンタップしない）':''}`);});
   render();
 }
 async function freezeOpp(pi,n){
@@ -8990,7 +8991,7 @@ DEFS.c691={name:'ニコル・ボーラス',civ:['水','火'],cost:8,power:7000,t
 
 DEFS.c692={name:'閃光の精霊カンビアーレ',civ:['光'],cost:8,power:13000,type:'c',race:['エンジェル・コマンド'],kw:['blocker','tbreaker'],rev0Shield:true,
   txt:['革命0：このクリーチャーを自分のシールドゾーンから手札に加えた時、自分のシールドが1つもなければ、このクリーチャーを自分の手札からコストを支払わずに召喚してもよい。','ブロッカー','T・ブレイカー','このクリーチャーが出た時、相手のクリーチャーをすべてタップする。次の相手のターンのはじめに、それらはアンタップしない。','このクリーチャーが攻撃する時、相手のエレメントを1つ選び、シールド化してもよい。'],
-  async onEnter(pi){G.p[1-pi].bz.forEach(x=>{if(x.dive)return;x.tapped=true;setU(x,'noUntap',pi);});log('相手のクリーチャーをすべてタップした（次の相手のターンのはじめにアンタップしない）');render();},
+  async onEnter(pi){G.p[1-pi].bz.forEach(x=>{if(x.dive)return;x.tapped=true;x.skipUntap=true;});log('相手のクリーチャーをすべてタップした（次の相手のターンのはじめにアンタップしない）');render();},
   async onAttack(pi){const t=await chooseOppElem(pi,'シールド化する相手のエレメント',null,true);if(t)await toOwner(t,'shield');}};
 
 const welFx=async pi=>{await draw(pi,1);if(G.over)return;await putFromZones(pi,['hand'],x=>(DEFS[x.id].kw||[]).includes('blocker'),'手札から出す「ブロッカー」を持つクリーチャー');};
@@ -9231,7 +9232,7 @@ DEFS.c736={name:'エンドレス・フローズン・カーニバル',civ:['水'
   altCpu:pi=>G.p[pi].hand.filter(h=>DEFS[h.id].type==='c'&&hasR(h,'スノーフェアリー')).length>=5,
   txt:['コストを支払うかわりに、自分の手札からスノーフェアリー・クリーチャーを5体捨て、この呪文を唱えてもよい。','バトルゾーンにある相手の、クリーチャーではない表向きのカードをすべて破壊し、相手のシールドゾーンにある表向きのカードをすべて持ち主の墓地に置く。','相手の、クリーチャーとマナゾーンにあるカードをすべてタップする。次の相手のターンのはじめに、それらはアンタップしない。'],
   async onCast(pi){const O=G.p[1-pi];const T=[...(O.ts||[])];if(T.length)await massDestroy(T.map(x=>[1-pi,x]));const S=O.shields.filter(s=>s.up);S.forEach(s=>{O.shields.splice(O.shields.indexOf(s),1);O.grave.push(plain(s));});if(S.length){log(`相手の表向きのシールド${S.length}つを墓地に置いた`);await shieldsGone(1-pi,S);}
-    O.bz.forEach(x=>{if(x.dive)return;x.tapped=true;setU(x,'noUntap',pi);});O.mana.forEach(m=>{m.tapped=true;m.lock=pi;});log('相手のクリーチャーとマナをすべてタップした（次の相手のターンのはじめにアンタップしない）');render();}};
+    O.bz.forEach(x=>{if(x.dive)return;x.tapped=true;x.skipUntap=true;});O.mana.forEach(m=>{m.tapped=true;m.lock=pi;});log('相手のクリーチャーとマナをすべてタップした（次の相手のターンのはじめにアンタップしない）');render();}};
 
 DEFS.c737={name:'熱き侵略 レッドゾーンZ',civ:['火'],cost:6,power:11000,type:'c',race:['ソニック・コマンド','侵略者'],kw:['wbreaker'],
   evo:{kind:'one',test:x=>civOf(x).includes('火'),label:'火のクリーチャー'},
@@ -9901,7 +9902,7 @@ DEFS.c998={name:'巨大設計図',civ:['自然'],cost:3,type:'s',race:[],txt:['�
 DEFS.c999={name:'ヴェネラック-F5',civ:['光'],cost:2,power:2000,type:'c',race:['メカ・デル・ディネロ'],
   txt:['相手のターンに、相手のクリーチャーが相手のマナゾーンにあるカードをタップせずに出た時、それをシールド化してもよい。','相手のターンにこのクリーチャーが離れた時、相手のクリーチャーを1体選び、タップする。次の相手のターンのはじめに、そのクリーチャーはアンタップしない。'],
   async onOppEnter(pi,c,x,ctx){if(G.cur===pi||(ctx&&ctx.paid)||!G.p[1-pi].bz.includes(x))return;if(await askYN(pi,`ヴェネラック-F5：『${nameOf(x)}』をシールド化しますか？`,x,true))await toOwner(x,'shield');},
-  async onLeave(pi){if(G.cur===pi)return;const t=await chooseOpp(pi,'タップする相手のクリーチャー（次の相手のターンのはじめにアンタップしない）');if(t){t.tapped=true;setU(t,'noUntap',pi);log(`『${nameOf(t)}』をタップした`);render();}}};
+  async onLeave(pi){if(G.cur===pi)return;const t=await chooseOpp(pi,'タップする相手のクリーチャー（次の相手のターンのはじめにアンタップしない）');if(t){t.tapped=true;t.skipUntap=true;log(`『${nameOf(t)}』をタップした`);render();}}};
 DEFS.c1000={name:'キャディ・ビートル',civ:['自然'],cost:2,power:1000,type:'c',race:['ジャイアント・インセクト'],deathMana:true,
   replEnter:(oi,x,card,pi)=>G.cur===pi&&D(card).type==='c'&&cc(card)>G.p[pi].mana.length?'mana':null,
   txt:['相手のターン中に、相手のマナゾーンのカードの枚数よりコストが大きい相手のクリーチャーが出る時、かわりにマナゾーンに置く。','このクリーチャーが破壊される時、墓地のかわりにマナゾーンに置く。']};
