@@ -10485,6 +10485,9 @@ DEFS.c1135={name:'叡智の聖騎士 スクアーロ',civ:['水'],cost:4,power:5
   txt:['NEO進化：水のクリーチャー1体の上に置いてもよい。','このクリーチャーが出た時、「ブロッカー」を持つクリーチャーをすべて、持ち主の手札に戻す。'],
   async onEnter(pi){const L=[];for(const q of [pi,1-pi])G.p[q].bz.filter(x=>D(x).type==='c'&&hasKw(x,'blocker')).forEach(x=>L.push(x));for(const x of L){if(G.over)return;await toOwner(x,'hand');}if(L.length)log(`「ブロッカー」を持つクリーチャー${L.length}体を手札に戻した`);},
   side:{name:'エナジー・ライト',civ:['水'],cost:3,type:'s',race:[],txt:['カードを2枚引く。'],async onCast(pi){await draw(pi,2);}}};
+DEFS.c1136={name:'タイク・タイソンズ',civ:['自然'],cost:2,power:1000,type:'c',race:['ジョーカーズ'],kw:[],jchange:4,
+  txt:['Jチェンジ4（このクリーチャーが攻撃する時、このクリーチャーと自分のマナゾーンにあるコスト4以下のジョーカーズ1体を入れ替えてもよい）','このクリーチャーがバトルゾーンを離れた時、自分の山札の上から1枚目をマナゾーンに置く。'],
+  async onLeave(pi){await manaTop(pi,1);}};
 {const _sl=summonLock;summonLock=function(pi,card){const d=card&&DEFS[card.id];if(d&&d.type==='c'&&d.cost!==INF&&d.cost<=4&&G&&G.p&&G.p.some(P=>P.bz.some(x=>D(x).noSummonLE4&&!ignored(x))))return true;return _sl(pi,card);};}
 UI.offCache={};
 CARD_IDS=Object.keys(DEFS).filter(k=>!DEFS[k].gr&&!DEFS[k].hidden).sort((a,b)=>+a.slice(1)-+b.slice(1));
