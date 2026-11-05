@@ -2788,8 +2788,9 @@ async function gateCheck(){
       if(G.over)return;
       const d=D(src.card);if(!d.gate)continue;
       const stillThere=(src.z==='hand'?P.hand:P.grave).some(x=>x.uid===src.card.uid);if(!stillThere)continue;
-      const bzJ=P.bz.filter(x=>isJ(x)&&x.id!=='c27');
-      const grJ=P.grave.filter(x=>isJ(x)&&x.uid!==src.card.uid);
+      const gt=d.gate.test||isJ;
+      const bzJ=[...P.bz,...(P.ts||[])].filter(x=>gt(x)&&x.id!=='c27');
+      const grJ=P.grave.filter(x=>gt(x)&&x.uid!==src.card.uid);
       if(bzJ.length+grJ.length<d.gate.n)continue;
       const take=[];grJ.forEach(x=>{if(take.length<d.gate.n)take.push({z:'grave',x});});
       bzJ.sort((a,b)=>cmp(pow(a),pow(b))).forEach(x=>{if(take.length<d.gate.n)take.push({z:'bz',x});});
@@ -10388,6 +10389,16 @@ DEFS.c1127={name:'ダーク・ルピア',civ:['闇'],cost:3,power:1000,type:'c',
 DEFS.c1128={name:'ルピア&ガ:ナテハ',civ:['無'],cost:2,power:2000,type:'c',race:['アーマード・ファイアー・バード','ノワールアビス'],kw:[],
   txt:['自分のターンの終わりに、自分のシールドを1つ墓地に置く。その後、カードを1枚引く。'],
   async endFx(pi){await q24ownShieldGrave(pi);if(G.over)return;await draw(pi,1);}};
+/* ===== DM26-EX4 Wiki照合による修正 ===== */
+/* 鮫鰐竜 ACE-Agony はツインパクト（呪文側：覚醒の杯） */
+DEFS.c7.civ=['闇','自然'];
+DEFS.c7.side={name:'覚醒の杯',civ:['水'],cost:4,type:'s',race:[],charger:true,txt:['カードを3枚引き、自分の手札を3枚捨てる。','チャージャー（この呪文を唱えた後、墓地のかわりにマナゾーンに置く）'],
+  async onCast(pi){await draw(pi,3);if(G.over)return;const P=G.p[pi];for(let i=0;i<3&&P.hand.length;i++){const x=await choose(pi,`捨てる手札（${i+1}/3）`,P.hand,cpuDiscardPick);if(x)await discardCard(pi,x);}}};
+/* エクストラEXライフ（2枚） */
+for(const id of ['c3','c8']){const d=DEFS[id];if(!d.kw.includes('exLife2'))d.kw.push('exLife2');if(!d.txt.some(t=>t.includes('エクストラEXライフ')))d.txt.unshift('エクストラEXライフ（このクリーチャーを出す時、自分の山札の上から2枚をシールド化する。このクリーチャーが離れる時、かわりにそのシールドを1つ墓地に置く）');}
+/* マンジー・ザ・ジョリー：J無月の門は魔導具も数える */
+DEFS.c15.gate.test=x=>isJ(x)||hasR(x,'魔導具');
+DEFS.c15.txt=DEFS.c15.txt.map(t=>t.startsWith('J 無月の門')?'J無月の門：各ターンの終わりに、自分の、魔導具またはジョーカーズと、墓地にある魔導具カードまたはジョーカーズ・カードをバトルゾーンと墓地から合計6枚選び、その上にこのクリーチャーを、自分の手札または墓地からコストを支払わずに召喚してもよい。':t);
 UI.offCache={};
 CARD_IDS=Object.keys(DEFS).filter(k=>!DEFS[k].gr&&!DEFS[k].hidden).sort((a,b)=>+a.slice(1)-+b.slice(1));
 
