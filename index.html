@@ -10424,7 +10424,7 @@ DEFS.c1126={name:'ハンプティ・ルピア',civ:['光','火'],cost:3,power:35
 DEFS.c1127={name:'ダーク・ルピア',civ:['闇'],cost:3,power:1000,type:'c',race:['ファイアー・バード'],kw:[],
   txt:['自分のドラゴンが破壊された時、相手のクリーチャーを1体破壊してもよい。'],
   async onMyDestroyed(pi,x,c){if(!isDragon(c)||!targetable(pi).length)return;const t=await chooseOpp(pi,'ダーク・ルピア：破壊する相手のクリーチャー',()=>true,strongPick,true);if(t)await destroy(1-pi,t);}};
-DEFS.c1128={name:'ルピア&ガ:ナテハ',civ:['無'],cost:2,power:2000,type:'c',race:['アーマード・ファイアー・バード','ノワールアビス'],kw:[],
+DEFS.c1128={name:'ルピア&ガ:ナテハ',civ:['闇'],cost:2,power:2000,type:'c',race:['アーマード・ファイアー・バード','ノワールアビス'],kw:[],
   txt:['自分のターンの終わりに、自分のシールドを1つ墓地に置く。その後、カードを1枚引く。'],
   async endFx(pi){await q24ownShieldGrave(pi);if(G.over)return;await draw(pi,1);}};
 /* ===== DM26-EX4 Wiki照合による修正 ===== */
