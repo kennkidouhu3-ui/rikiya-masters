@@ -296,6 +296,41 @@ button.big{font-size:18px;padding:14px 22px;margin-top:6px}
 .dknew{margin-top:14px;display:flex;flex-direction:column;gap:8px}
 .dknew .big{width:100%}
 .dkoff{display:flex;gap:6px}.dkoff select{flex:1;min-width:0}
+/* 対戦画面 */
+.ghdr{position:sticky;top:0;z-index:30;background:var(--bg);padding:8px 0 6px;border-bottom:3px solid var(--line)}
+.ghdr.me{border-bottom-color:var(--btn)}
+.ghdr.op{border-bottom-color:var(--danger)}
+.gturn{font-size:20px}
+.ghdr.me .gturn{color:var(--btn)}
+.ghdr.op .gturn{color:var(--danger)}
+.gend{font-size:15px;padding:10px 14px}
+.gguide{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:8px 0 2px;font-size:13px}
+.gguide.wait{color:var(--muted);font-weight:700;padding:6px 0}
+.gdot{width:10px;height:10px;border-radius:50%;background:var(--danger);display:inline-block;margin-right:6px;animation:gpulse 1s infinite alternate}
+@keyframes gpulse{from{opacity:.3}to{opacity:1}}
+.gst{padding:4px 9px;border-radius:999px;background:var(--panel2);color:var(--muted);font-weight:700;white-space:nowrap}
+.gst.on{background:var(--btn);color:var(--btnink)}
+.gst.done{background:transparent;color:var(--ok);border:1px solid var(--ok)}
+.garr{color:var(--muted);font-style:normal}
+.gmana{margin-left:auto;font-size:13px;white-space:nowrap}
+.gmana b{font-size:18px;color:var(--btn)}
+.ghint{font-size:12px;color:var(--muted);margin:2px 0 6px;line-height:1.5}
+.gok{color:var(--ok);font-weight:700}
+.gmsg{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:4px 0 8px;font-size:14px}
+.glast{font-weight:700}
+.zhead{font-size:13px;font-weight:700;padding:3px 10px;border-radius:8px;display:inline-block;margin-bottom:6px;color:#fff}
+.zhead.op{background:var(--danger)}
+.zhead.me{background:var(--btn)}
+.zone.theirs{border-left:4px solid var(--danger)}
+.zone.mine{border-left:4px solid var(--btn)}
+.zone .lbl{font-size:12px;font-weight:700;color:var(--muted);margin:6px 0 2px}
+.row.bz:has(> .empty:only-child){min-height:0}
+.row.bz > .empty{padding:10px 4px;display:block}
+.card.ok{box-shadow:0 0 0 3px var(--ok),0 0 12px var(--ok);position:relative}
+.row.hand .card.ok::after,.row.bz .card.ok::after{position:absolute;right:2px;top:2px;background:var(--ok);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;white-space:nowrap;z-index:2}
+.row.hand .card.ok::after{content:'使える'}
+.row.bz .card.ok::after{content:'⚔攻撃'}
+.row.hand,.row.bz{padding:4px 2px}
 
 </style>
 </head>
@@ -11127,6 +11162,33 @@ function deckListHTML(){
 /* メニューの「マイデッキ」は一覧へ、他の画面の「編集」は編集画面へ */
 {const _t=titleHTML;titleHTML=function(){return _t().replace('<button class="mtile t3" data-do="deckedit">','<button class="mtile t3" onclick="UI.dview=\'list\';UI.dlMsg=\'\';UI.screen=\'deck\';if(!UI.myDeck)loadDeck();render();window.scrollTo(0,0)">').replace(/<button data-do="deckedit">/g,'<button onclick="dkEdit(UI.dcur);UI.dfrom=\'title\';render()">');};}
 try{if(UI.screen==='title'&&!G)render();}catch(e){}
+
+/* ===== 対戦画面（わかりやすい表示） ===== */
+function gameGuideHTML(){
+  if(G.over)return '';
+  const my=G.cur===ME;
+  if(!my)return `<div class="gguide wait"><span class="gdot"></span>${NET.role?'相手':'CPU'}が考えています… しばらくお待ちください</div>`;
+  if(G.busy)return `<div class="gguide wait"><span class="gdot"></span>処理中…</div>`;
+  const P=G.p[ME];const un=P.mana.filter(m=>!m.tapped).length;
+  const canPlay=P.hand.some(c=>playOptions(ME,c,'hand').some(o=>!o.why&&o.key!=='mana'));
+  const canAtkAny=P.bz.some(c=>canAtk(c));
+  const st=(done,on,t)=>`<span class="gst ${done?'done':''} ${on?'on':''}">${done?'✓ ':''}${t}</span>`;
+  return `<div class="gguide">
+    ${st(G.charged,!G.charged,'① マナを1枚置く')}<i class="garr">›</i>${st(false,G.charged&&canPlay,'② カードを使う')}<i class="garr">›</i>${st(false,canAtkAny,'③ 攻撃する')}<i class="garr">›</i>${st(false,!canPlay&&!canAtkAny&&G.charged,'④ ターン終了')}
+    <span class="gmana">使えるマナ <b>${un}</b>/${P.mana.length}</span></div>
+    <p class="ghint">${G.charged?'':'手札のカードを押すと「マナに置く」が選べます（1ターンに1枚）。'}<span class="gok">緑に光っているカード</span>が、いま使える・攻撃できるカードです。カードを押すと能力も見られます。</p>`;
+}
+gameHTML=function(){
+  const my=G.cur===ME&&!G.over;
+  const last=G.log[G.log.length-1]||'';
+  const who=G.cur===ME?'あなたのターン':(NET.role?'相手のターン':'CPUのターン');
+  const hdr=`<header class="hdr ghdr ${G.cur===ME?'me':'op'}"><div class="turn"><b class="gturn">${G.over?'対戦終了':who}${G.inExtra?'（追加ターン）':''}</b><span>ターン${G.turnNo}</span></div><div class="btns">${NET.role?`<button data-do="leave">${UI.leaveArm?'本当に中断':'中断'}</button>`:''}<button data-do="log">ログ</button><button data-do="rules">ルール</button><button class="primary gend" data-do="end" ${myTurnOK()?'':'disabled'}>ターン終了 ▶</button></div></header>`;
+  const msg=`<div class="msg gmsg">${NET.role&&NET.err?`<span class="warn">${esc(NET.err)}</span> `:''}${NET.role&&G.wait!=null&&G.wait!==ME&&!G.over?'<strong>相手の入力を待っています…</strong> ':''}<span class="glast">${esc(last)}</span>${my&&!G.busy&&G.debt[ME]?`<em>逆転撃の代償：次のターンにマナ${G.debt[ME]}枚</em>`:''}</div>`;
+  const opp=zoneHTML(1-ME).replace('<section class="zone theirs">',`<section class="zone theirs"><div class="zhead op">${NET.role?'相手':'CPU'}の場</div>`);
+  const mine=zoneHTML(ME).replace('<section class="zone mine">','<section class="zone mine"><div class="zhead me">あなたの場</div>');
+  return hdr+gameGuideHTML()+msg+opp+`<div class="mid"></div>`+mine;
+};
+try{if(G&&UI.screen==='game')render();}catch(e){}
 
 </script>
 </body>
