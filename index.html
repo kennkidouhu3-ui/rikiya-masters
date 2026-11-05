@@ -11171,6 +11171,10 @@ function dkCopy(i){selectDeck(i);if(!newDeck(true))return;UI.dlMsg=`「${UI.deck
 function dkDel(i){if(UI.dlDel!==i){UI.dlDel=i;render();return;}UI.dlDel=null;const nm=UI.decks[i].name;selectDeck(i);deleteDeck();UI.dlMsg=`「${nm}」を削除しました`;render();}
 function dkFromOfficial(){const s=document.getElementById('dkoff');if(!s||s.value==='')return;if(UI.decks.length>=MAX_DECKS){alert('マイデッキがいっぱいです（12個まで）。どれかを削除してから試してください。');return;}
   const i=+s.value;const ids=officialIds(i);const cards={};ids.forEach(id=>cards[id]=(cards[id]||0)+1);saveDeck();UI.decks.push({name:OFFICIAL_DECKS[i].n.slice(0,20),cards});UI.dcur=UI.decks.length-1;UI.myDeck=Object.assign({},cards);saveDeck();dkUseMine();UI.dlMsg=`おすすめデッキ「${OFFICIAL_DECKS[i].n}」をマイデッキに入れました`;render();}
+function dkText(i){const d=UI.decks[i];const L=CARD_IDS.filter(id=>(d.cards||{})[id]).map(id=>`${d.cards[id]} ${DEFS[id].name}`);return `【${d.name}】（${deckCount(d.cards)}枚）\n`+L.join('\n');}
+async function dkCopyText(i){const t=dkText(i);let ok=false;try{await navigator.clipboard.writeText(t);ok=true;}catch(e){}
+  if(!ok){try{const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();ok=document.execCommand('copy');a.remove();}catch(e){}}
+  UI.dlMsg=ok?`「${UI.decks[i].name}」のカードリストをコピーしました。LINEやチャットに貼り付けられます。`:'コピーできませんでした';render();}
 function dkShare(i){selectDeck(i);shareCurrent();}
 function deckDone(){if(UI.dfrom==='list'){dkGo('list');UI.dlMsg=`「${UI.decks[UI.dcur].name}」を保存しました`;render();return;}UI.screen='title';render();window.scrollTo(0,0);}
 function dkMenu(){UI.screen='title';UI.menu=null;render();window.scrollTo(0,0);}
@@ -11186,7 +11190,8 @@ function deckListHTML(){
       <div class="dkr2"><span class="dkn ${ok?'ok':'ng'}">${ok?'✓ 40枚（完成）':`${n}枚（あと${DECK_SIZE-n>0?DECK_SIZE-n+'枚':'—'}）`}</span>${shared?'<span class="dksh">みんなに共有中</span>':''}</div>
       <div class="dkr3"><button class="primary" onclick="dkEdit(${i})">編集する</button>
         ${cur?'':`<button onclick="dkUse(${i})" ${ok?'':'disabled'}>このデッキを使う</button>`}
-        <button class="ghost" onclick="dkCopy(${i})" ${UI.decks.length>=MAX_DECKS?'disabled':''}>コピー</button>
+        <button class="ghost" onclick="dkCopy(${i})" ${UI.decks.length>=MAX_DECKS?'disabled':''}>複製</button>
+        <button class="ghost" onclick="dkCopyText(${i})">リストをコピー</button>
         ${SHARE.on&&!shared?`<button class="ghost" onclick="dkShare(${i})">みんなに共有</button>`:''}
         <button class="ghost dclr" onclick="dkDel(${i})">${UI.dlDel===i?'もう一度押すと削除':'削除'}</button></div></div>`;}).join('');
   const full=UI.decks.length>=MAX_DECKS;
