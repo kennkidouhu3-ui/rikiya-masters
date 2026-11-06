@@ -10212,12 +10212,12 @@ const q24crC=(c,v)=>D(c).type==='c'&&civOf(c).includes(v);
 const q24othersOf=(c,v)=>G.p[c.owner].bz.filter(x=>x!==c&&q24crC(x,v)).length;
 const q24allMana=(pi,v)=>G.p[pi].mana.every(m=>mCiv(m).includes(v));
 const q24manaPickHand=async(pi,f,title,may)=>{const P=G.p[pi];const L=P.mana.map(m=>m.card).filter(f||(()=>true));if(!L.length)return null;const x=await choose(pi,title,L,bigPick,may);if(x)toHandFrom(pi,x,'mana');return x;};
-const q24ownShieldGrave=async pi=>{const P=G.p[pi];if(!P.shields.length)return;const s=(await pickOwnShields(pi,1,'墓地に置く自分のシールド'))[0]||P.shields[P.shields.length-1];const i=P.shields.indexOf(s);if(i<0)return;P.shields.splice(i,1);P.grave.push(plain(s));log('自分のシールドを1枚墓地に置いた');render();await shieldsGone(pi,[s]);};
+const q24ownShieldGrave=async pi=>{const P=G.p[pi];if(!P.shields.length)return;if(G.shStay&&G.shStay.pi===pi&&G.atkUid===G.shStay.uid){log('シールドゾーンを離れない');return;}const s=(await pickOwnShields(pi,1,'墓地に置く自分のシールド'))[0]||P.shields[P.shields.length-1];const i=P.shields.indexOf(s);if(i<0)return;P.shields.splice(i,1);P.grave.push(plain(s));log('自分のシールドを1枚墓地に置いた');render();await shieldsGone(pi,[s]);};
 /* 自分のシールドを好きな数選ぶ（CPUは2枚残す） */
 const q24pickShieldsAny=async(pi,title)=>{const P=G.p[pi];if(P.cpu){const n=Math.max(0,P.shields.length-2);return P.shields.slice(P.shields.length-n);}return pickOwnShields(pi,P.shields.length,title);};
 const q24eachManaToHand=async(pi,n)=>{for(const q of [pi,1-pi]){const Q=G.p[q];for(let i=0;i<n&&Q.mana.length;i++){if(G.over)return;const x=await choose(q,`手札に戻す自分のマナゾーンのカード（${i+1}/${n}）`,Q.mana.map(m=>m.card),bigPick);if(x)toHandFrom(q,x,'mana');}}};
 const q24handToShield=async(pi,may)=>{const P=G.p[pi];if(!P.hand.length)return null;const x=await choose(pi,'裏向きにしてシールドに加える手札',P.hand,cpuDiscardPick,may);if(!x)return null;P.hand.splice(P.hand.indexOf(x),1);await addShield(pi,plain(x),false,true);log('手札を1枚、裏向きにしてシールドに加えた');render();return x;};
-const q24shieldToHandPick=async(pi)=>{const P=G.p[pi];if(!P.shields.length)return;const s=(await pickOwnShields(pi,1,'手札に加える自分のシールド'))[0]||P.shields[P.shields.length-1];const i=P.shields.indexOf(s);if(i<0)return;P.shields.splice(i,1);P.hand.push(plain(s));log('シールドを1つ手札に加えた（S・トリガーは使えない）');render();await shieldsGone(pi,[s]);};
+const q24shieldToHandPick=async(pi)=>{const P=G.p[pi];if(!P.shields.length)return;if(G.shStay&&G.shStay.pi===pi&&G.atkUid===G.shStay.uid){log('シールドゾーンを離れない');return;}const s=(await pickOwnShields(pi,1,'手札に加える自分のシールド'))[0]||P.shields[P.shields.length-1];const i=P.shields.indexOf(s);if(i<0)return;P.shields.splice(i,1);P.hand.push(plain(s));log('シールドを1つ手札に加えた（S・トリガーは使えない）');render();await shieldsGone(pi,[s]);};
 const q24NC=(v)=>`このクリーチャーのパワーは、バトルゾーンにある自分の他の${v}のクリーチャー1体につき+1000される。`;
 const q24ALLM=(v,s)=>`自分のマナゾーンにあるカードがすべて${v}のカードである間、${s}`;
 const q24SH='このクリーチャーがバトルゾーンから自分の墓地に置かれるとき、裏向きにして自分のシールドに加える。';
@@ -10349,7 +10349,7 @@ DEFS.c1112={name:'邪王来混沌三眼鬼',civ:['火'],cost:5,power:7000,powTag
   async onOppAttack(pi,c,a){if(G.atkN[1-pi]===1)await q25Sangan(pi);}};
 DEFS.c1113={name:'キズグイ変怪',civ:['火'],cost:3,power:4000,type:'c',race:['デモニオ','鬼札王国'],kw:['sa'],
   txt:['スピードアタッカー','このクリーチャーが攻撃する時、自分のシールドを1つ、手札に加える。ただし、その「S・トリガー」は使えない。',q25ONI+'このクリーチャーの攻撃中、自分のカードはシールドゾーンを離れない。'],
-  async onAttack(pi,c){await q24shieldToHandPick(pi);if(oniTime()){G.shStay={pi,uid:c.uid};log('鬼タイム：このクリーチャーの攻撃中、自分のシールドはシールドゾーンを離れない');}},
+  async onAttack(pi,c){if(oniTime()){G.shStay={pi,uid:c.uid};log('鬼タイム：このクリーチャーの攻撃中、自分のシールドはシールドゾーンを離れない（シールドは手札に加わらない）');return;}await q24shieldToHandPick(pi);},
   async afterAttack(){G.shStay=null;}};
 DEFS.c1114={name:'カンゴク入道',civ:['火'],cost:2,power:2000,powTag:'+',type:'c',race:['デモニオ','鬼札王国'],kw:[],
   txt:['自分のターンの終わりに、自分のシールドを1つ、手札に加える。ただし、その「S・トリガー」は使えない。',q25ONI+'このクリーチャーのパワーを+3000する。'],
