@@ -351,6 +351,13 @@ button.big{font-size:18px;padding:14px 22px;margin-top:6px}
 .rsbox{background:#fff6e0;border:2px solid #f2a400;border-radius:14px;padding:12px 14px;margin:0 0 14px;text-align:left}
 .rsbox b{font-size:16px}.rsbox p{margin:6px 0;font-size:13px}
 .rsbtn{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.rsbtn .big{flex:1;min-width:180px}
+/* みんなのデッキ：中身 */
+.shview{margin-top:10px;border-top:1px dashed var(--line,#ccc);padding-top:8px}
+.shview .dcat{font-size:14px;margin:10px 0 4px}
+.drow.shr{display:flex;align-items:center}.drow.shr .dn{flex:1}
+.shc{font-size:15px;min-width:36px;text-align:center}
+.shvb{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.shnote{background:#e6f4ea;border:1px solid #9fd0ad;border-radius:10px;padding:6px 10px;font-size:13px;margin:6px 0}
 
 </style>
 </head>
@@ -11217,8 +11224,8 @@ function deckListHTML(){
   const full=UI.decks.length>=MAX_DECKS;
   const offs=OFFICIAL_DECKS.map((d,i)=>`<option value="${i}">${esc(d.n)}</option>`).join('');
   let shared='';
-  if(SHARE.on){const L=shareList();shared=`<h3 class="dkh">みんなのデッキ（共有）</h3><p class="note">ここにあるデッキは、このURLを開いた全員が見られます。「自分のデッキに入れる」でマイデッキにコピーできます。</p>
-    ${L.length?L.map(([sid,sd])=>{const n=shareCount(sd);const has=(UI.decks||[]).some(x=>x.sid===sid);return `<div class="dkrow sh"><div class="dkr1"><b class="dkname">${esc(sd.name)}</b></div><div class="dkr2"><span class="dkn ${n===DECK_SIZE?'ok':'ng'}">${n}枚</span></div><div class="dkr3"><button onclick="shareImport('${sid}');UI.dlMsg='マイデッキに入れました';render()">${has?'最新にする':'自分のデッキに入れる'}</button><button class="ghost dclr" onclick="shareDelete('${sid}')">${SHARE.delArm===sid?'もう一度押すと共有から削除':'共有から削除'}</button></div></div>`;}).join(''):'<p class="note">まだ共有されたデッキはありません</p>'}`;}
+  if(SHARE.on){const L=shareList();shared=`<h3 class="dkh">みんなのデッキ（共有）</h3><p class="note">ここにあるデッキは、このURLを開いた全員が見られます。「中身を見る」でカードを確認、「編集する」で直せます（直すと、みんなのデッキも自動で更新されます）。</p>
+    ${L.length?L.map(([sid,sd])=>{const n=shareCount(sd);const has=(UI.decks||[]).some(x=>x.sid===sid);const op=SHARE.open===sid;return `<div class="dkrow sh ${op?'open':''}"><div class="dkr1"><b class="dkname">${esc(sd.name)}</b></div><div class="dkr2"><span class="dkn ${n===DECK_SIZE?'ok':'ng'}">${n===DECK_SIZE?'✓ 40枚':n+'枚'}</span>${has?'<span class="dksh">マイデッキにも入っています</span>':''}</div><div class="dkr3"><button class="primary" onclick="shView('${sid}')">${op?'▲ 中身をとじる':'▼ 中身を見る'}</button><button onclick="shEdit('${sid}')">編集する</button><button class="ghost" onclick="shareImport('${sid}');UI.dlMsg='マイデッキに入れました';render()">${has?'最新にする':'マイデッキに入れる'}</button><button class="ghost dclr" onclick="shareDelete('${sid}')">${SHARE.delArm===sid?'もう一度押すと共有から削除':'共有から削除'}</button></div>${op?shContentHTML(sid):''}</div>`;}).join(''):'<p class="note">まだ共有されたデッキはありません</p>'}`;}
   else shared=`<h3 class="dkh">みんなのデッキ（共有）</h3><p class="note">${SHARE.err?esc(SHARE.err):'GitHub Pagesのページで開くと使えます（読み込み中の場合もあります）'}</p>`;
   return `<div class="title deckscr dklist">
     <div class="dktop"><button class="mback" onclick="dkMenu()">← メニューにもどる</button></div>
@@ -11243,6 +11250,36 @@ function deckListHTML(){
 /* メニューの「マイデッキ」は一覧へ、他の画面の「編集」は編集画面へ */
 {const _t=titleHTML;titleHTML=function(){return _t().replace('<button class="mtile t3" data-do="deckedit">','<button class="mtile t3" onclick="UI.dview=\'list\';UI.dlMsg=\'\';UI.screen=\'deck\';if(!UI.myDeck)loadDeck();render();window.scrollTo(0,0)">').replace(/<button data-do="deckedit">/g,'<button onclick="dkEdit(UI.dcur);UI.dfrom=\'title\';render()">');};}
 try{if(UI.screen==='title'&&!G)render();}catch(e){}
+
+/* ===== みんなのデッキ：中身を見る・編集する ===== */
+function shView(sid){SHARE.open=SHARE.open===sid?null:sid;render();}
+function shContentHTML(sid){
+  const sd=SHARE.decks[sid];if(!sd)return '';
+  const {cards,miss}=shareResolve(sd);
+  const ids=deckSort(CARD_IDS.filter(id=>cards[id]));
+  if(!ids.length)return '<div class="shview"><p class="note">カードが入っていません</p></div>';
+  const g=CATS.map(([k,l])=>{const L=ids.filter(id=>catOf(id)===k);if(!L.length)return '';const cnt=L.reduce((a,id)=>a+cards[id],0);
+    return `<h4 class="dcat">${l}<span>${cnt}枚</span></h4><div class="dlist">${L.map(id=>{const d=DEFS[id],civs=civOf({id});
+      return `<div class="drow in shr" style="--civ:${CIVC[civs[0]]};--g:${civGrad(civs)}"><button class="dn" data-act="cat" data-id="${id}"><i>${costTxt(d.cost)}</i><span>${esc(d.name)}<small>${esc(typeLabel(d))}</small></span></button><b class="shc">×${cards[id]}</b></div>`;}).join('')}</div>`;}).join('');
+  return `<div class="shview"><p class="note">カード名を押すと、カードの説明が見られます。</p>${miss?`<p class="warn">このアプリにないカードが${miss}枚あります</p>`:''}${g}
+    <div class="shvb"><button onclick="shEdit('${sid}')">このデッキを編集する</button><button class="ghost" onclick="shCopy('${sid}')">リストをコピー</button></div></div>`;
+}
+/* 編集：マイデッキに入っていればそれを最新にして開く。なければマイデッキに入れて開く（共有と自動でつながる） */
+function shEdit(sid){
+  const sd=SHARE.decks[sid];if(!sd)return;
+  let i=UI.decks.findIndex(d=>d.sid===sid);
+  if(i<0&&UI.decks.length>=MAX_DECKS){alert('マイデッキがいっぱいです（12個まで）。どれかを削除してから試してください。');return;}
+  shareImport(sid);i=UI.decks.findIndex(d=>d.sid===sid);if(i<0)return;
+  SHARE.open=null;dkEdit(i);UI.dtab='deck';render();
+}
+async function shCopy(sid){const sd=SHARE.decks[sid];if(!sd)return;const {cards}=shareResolve(sd);
+  const t=`【${sd.name}】（${Object.values(cards).reduce((a,b)=>a+b,0)}枚）\n`+CARD_IDS.filter(id=>cards[id]).map(id=>`${cards[id]} ${DEFS[id].name}`).join('\n');
+  let ok=false;try{await navigator.clipboard.writeText(t);ok=true;}catch(e){}
+  if(!ok){try{const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();ok=document.execCommand('copy');a.remove();}catch(e){}}
+  UI.dlMsg=ok?`「${sd.name}」のカードリストをコピーしました`:'コピーできませんでした';render();}
+/* 共有デッキを編集中は、上にそのことを表示 */
+{const _dh2=deckHTML;deckHTML=function(){let h=_dh2();if(UI.dview!=='edit')return h;const d=UI.decks[UI.dcur];
+  if(d&&d.sid&&SHARE.on&&SHARE.decks[d.sid])h=h.replace('<div class="dkedhead">','<p class="shnote">みんなのデッキと共有中です。ここで直すと、みんなのデッキも自動で更新されます。</p><div class="dkedhead">');return h;};}
 
 /* ===== 対戦画面（わかりやすい表示） ===== */
 function gameGuideHTML(){
