@@ -342,6 +342,15 @@ button.big{font-size:18px;padding:14px 22px;margin-top:6px}
 .rmnone{background:var(--panel2);border-radius:10px;padding:10px}
 .rmmake{width:100%}
 .rmcode{margin-top:12px;font-size:13px;color:var(--muted)}.rmcode summary{cursor:pointer}
+/* ハイパーモード */
+.hyb{position:absolute;left:2px;right:2px;text-align:center;bottom:16px;font-style:normal;font-size:10px;line-height:14px;padding:0 6px;border-radius:7px;background:linear-gradient(90deg,#e0362c,#f2a400);color:#fff;font-weight:700;white-space:nowrap;z-index:3;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.row.bz .card.ok.hzok::after{content:'ハイパー化'}
+.row.bz .card.hzok{box-shadow:0 0 0 3px #f2a400,0 0 12px #f2a400}
+.hymode{display:inline-block;margin-left:6px;padding:0 8px;border-radius:9px;background:linear-gradient(90deg,#e0362c,#f2a400);color:#fff;font-weight:700;font-size:12px}
+/* 対戦にもどる */
+.rsbox{background:#fff6e0;border:2px solid #f2a400;border-radius:14px;padding:12px 14px;margin:0 0 14px;text-align:left}
+.rsbox b{font-size:16px}.rsbox p{margin:6px 0;font-size:13px}
+.rsbtn{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.rsbtn .big{flex:1;min-width:180px}
 
 </style>
 </head>
@@ -1572,7 +1581,7 @@ async function shieldsGone(pi,list){
     else u.forEach(x=>P.grave.push(x));
     log(`シールドの下にあった${u.length}枚も一緒に移動した`);}}
   for(const x of [...G.p[pi].bz]){if(G.over)return;if(G.p[pi].bz.includes(x)&&!ignored(x)&&D(x).onMyShieldGone)await D(x).onMyShieldGone(pi,x,list);}
-  for(const x of G.p[pi].bz)if(D(x).hyper&&!x.hyper&&!ignored(x)){x.hyper=true;log(`Zラッシュ！ 『${nameOf(x)}』のハイパーモードが解放された`);}
+  zrRelease(pi);zrSnap();
   for(const s of list){
     if(!s.up||!DEFS[s.id].castle)continue;
     const P=G.p[pi];for(const z of ['hand','grave','deck']){const i=P[z].findIndex(x=>x.uid===s.uid);if(i>=0)P[z].splice(i,1);}
@@ -10979,7 +10988,7 @@ function sheetHTML(){
     inst=f.inst;id=inst.id;
     if(f.zone==='ts')info=`<div class="now">${D(inst).field||'タマシード'}（エレメント）${sasaOf(inst)?`／ササゲール${sasaOf(inst)}`:''}${isLinked(inst)?`／G・リンク中（${linkMembers(inst).map(x=>nameOf(x)).join('＋')}）`:''}${sealN(inst)?`／封印${sealN(inst)}つ`:''}${ignored(inst)?'／能力は無視されています':''}</div>`;
     if(f.zone==='shield')info=`<div class="now">表向きのシールド</div>`;
-    if(f.zone==='bz')info=`<div class="now">現在のパワー ${powTxt(pow(inst))}${inst.under&&inst.under.length?`／下に${inst.under.length}枚`:''}${inst.pile&&inst.pile.length?`／下のカード${inst.pile.length}枚`:''}${inst.sick?'／召喚酔い':''}${inst.tapped?'／タップ':''}${inst.dive?'／ジャストダイバー中':''}${hasU(inst,'noAtk')?'／攻撃できない':''}${hasU(inst,'noBlock')?'／ブロックできない':''}${hasU(inst,'noUntap')?'／アンタップしない':''}${hasU(inst,'noDieBattle')?'／バトル中破壊されない':''}${sasaOf(inst)?`／ササゲール${sasaOf(inst)}`:''}${ignored(inst)?'／能力は無視されています':''}</div>`;
+    if(f.zone==='bz')info=`<div class="now">現在のパワー ${powTxt(pow(inst))}${inst.hyper&&D(inst).hyper?'<span class="hymode">ハイパーモード中</span>':''}${inst.under&&inst.under.length?`／下に${inst.under.length}枚`:''}${inst.pile&&inst.pile.length?`／下のカード${inst.pile.length}枚`:''}${inst.sick?'／召喚酔い':''}${inst.tapped?'／タップ':''}${inst.dive?'／ジャストダイバー中':''}${hasU(inst,'noAtk')?'／攻撃できない':''}${hasU(inst,'noBlock')?'／ブロックできない':''}${hasU(inst,'noUntap')?'／アンタップしない':''}${hasU(inst,'noDieBattle')?'／バトル中破壊されない':''}${sasaOf(inst)?`／ササゲール${sasaOf(inst)}`:''}${ignored(inst)?'／能力は無視されています':''}</div>`;
     if(f.pi===ME&&myTurnOK()){
       if(f.zone==='hand'){
         if(!G.charged&&!mainOver(ME)&&G.mainT!==G.turnNo)btns+=`<button data-do="charge" data-uid="${s.uid}">マナにチャージ</button>`;
@@ -11312,6 +11321,109 @@ lobbyHTML=function(){
   <button class="ghost" data-do="leave">やめる</button></div>`;
 };
 {let k=0;const iv=setInterval(()=>{k++;if(NET.db){roomsStart();clearInterval(iv);}else if(k>120||NET.db===null)clearInterval(iv);},500);}
+
+/* ===== ハイパーモード（Zラッシュ・ハイパー化）の表示と処理 ===== */
+function zrHas(x){const d=D(x);return !!(d&&d.hyper&&(d.txt||[]).some(t=>/^Zラッシュ/.test(t)));}
+function zrRelease(pi){for(const x of G.p[pi].bz)if(zrHas(x)&&!x.hyper&&!ignored(x)){x.hyper=true;log(`Zラッシュ！ 『${nameOf(x)}』のハイパーモードが解放された`);}}
+function zrUids(P){const s=[];for(const sh of P.shields){s.push(sh.uid);(sh.under||[]).forEach(u=>s.push(u.uid));}return s;}
+function zrSnap(){if(!G||!G.p)return;G.shSnap=G.p.map(zrUids);}
+/* どの効果でシールドが離れても、Zラッシュが働くように見張る */
+function zrSweep(){
+  if(!G||!G.p||G.over||NET.role==='guest')return;
+  if(!G.shSnap){zrSnap();return;}
+  G.p.forEach((P,q)=>{const now=new Set(zrUids(P));if((G.shSnap[q]||[]).some(u=>!now.has(u)))zrRelease(q);});
+  zrSnap();
+}
+{const _r=render;render=function(){try{zrSweep();}catch(e){}return _r.apply(this,arguments);};}
+/* ハイパーモード中の印と「ハイパー化できる」の印 */
+{const _c=cardHTML;cardHTML=function(inst,o={}){
+  let h=_c(inst,o);if(o.back||!inst||!G||!G.p)return h;
+  try{
+    const onBz=inst.owner!==undefined&&G.p[inst.owner]&&G.p[inst.owner].bz.includes(inst);
+    if(!onBz)return h;
+    if(inst.hyper&&D(inst).hyper)h=h.replace(/<\/div>$/,'<b class="hyb">ハイパー</b></div>');
+    else if(inst.owner===ME&&G.cur===ME&&!G.busy&&D(inst).hyperize&&playOptions(ME,inst,'bz').some(op=>op.key==='hyperize'&&!op.why))h=h.replace('class="card ','class="card hzok ');
+  }catch(e){}
+  return h;};}
+/* CPU：攻撃できないクリーチャーをタップに使えるときだけハイパー化する */
+{const _w=cpuWants;cpuWants=function(pi,card,key,zone){
+  if(key==='hyperize'){const n=D(card).hyperize===true?1:D(card).hyperize;const others=G.p[pi].bz.filter(y=>y!==card&&!y.tapped);const idle=others.filter(y=>!canAtk(y));return idle.length>=n||others.length>n+1;}
+  return _w(pi,card,key,zone);};}
+
+/* ===== オンライン対戦：途中で画面がかわっても、あとから対戦にもどれる ===== */
+const RESUME_KEY='dm26resume',RESUME_TTL=6*60*60*1000;
+const RES={busy:false,err:''};
+function resGet(){try{const v=JSON.parse(localStorage.getItem(RESUME_KEY)||'null');if(v&&v.code&&Date.now()-(v.t||0)<RESUME_TTL)return v;}catch(e){}return null;}
+function resSave(){try{if(NET.role&&NET.code)localStorage.setItem(RESUME_KEY,JSON.stringify({role:NET.role,code:NET.code,t:Date.now()}));}catch(e){}}
+function resClear(){try{localStorage.removeItem(RESUME_KEY);}catch(e){}}
+/* 盤面のJSONから、ホストの対戦データを元に戻す */
+function resRestoreG(s){
+  const g=JSON.parse(s);
+  const base=freshG();
+  for(const k in base)if(!(k in g))g[k]=base[k];
+  g.fromDeck=new Set();g.gSnap=g.p.map(P=>new Set((P.grave||[]).map(x=>x.uid)));
+  g.busy=false;g.wait=null;g.handEnterBusy=false;g.gwBusy=false;g.battling=null;
+  let mx=0;const walk=o=>{if(!o||typeof o!=='object')return;if(Array.isArray(o)){o.forEach(walk);return;}if(typeof o.uid==='number'&&o.uid>mx)mx=o.uid;for(const k in o){const v=o[k];if(v&&typeof v==='object')walk(v);}};
+  walk(g.p);if(UID<=mx)UID=mx+1;
+  return g;
+}
+async function resumeGame(){
+  const r=resGet();if(!r||!NET.db||RES.busy)return;
+  RES.busy=true;RES.err='';render();
+  try{
+    const snap=await NET.db.doc(`games/${r.code}`).get();
+    const d=snap.exists?snap.data():null;
+    if(!d||d.phase==='closed'){resClear();RES.busy=false;RES.err='その対戦はもう終わっています';render();return;}
+    if(d.phase!=='playing'||!d.s){RES.busy=false;RES.err='まだ対戦が始まっていません。もう一度部屋をつくってください。';resClear();render();return;}
+    const er=e=>netErr(explainErr(e,'通信エラー'));
+    resetNet();NET.code=r.code;
+    if(r.role==='guest'){
+      NET.role='guest';ME=1;
+      /* まだ答えていない質問があれば、もう一度出す */
+      const [ask,ans]=await Promise.all([gdoc('-ask').get(),gdoc('-ans').get()]);
+      const a=ask.exists?ask.data():null,b=ans.exists?ans.data():null;
+      NET.askInit=true;NET.lastAsk=(a&&a.pi===ME&&a.kind!=='cancel'&&(!b||b.seq!==a.seq))?null:(a?a.seq:null);
+      G=JSON.parse(d.s);UI.screen='game';UI.sheet=null;UI.modal=null;UI.manaSel=null;UI.result=G.result||null;UI.resultHidden=false;
+      NET.unsubs.push(gdoc().onSnapshot(onState,er),gdoc('-ask').onSnapshot(onAsk,er));
+    }else{
+      NET.role='host';ME=0;NET.askBase=Math.random().toString(36).slice(2,8);
+      G=resRestoreG(d.s);NET.lastS=null;
+      UI.screen='game';UI.sheet=null;UI.modal=null;UI.manaSel=null;UI.result=G.result||null;UI.resultHidden=false;
+      if(!G.over)log('ホストが対戦にもどってきました');
+      /* ゲストに出していた質問は取り消す（相手の画面を閉じる） */
+      try{await gdoc('-ask').set({seq:`${NET.askBase}-cancel`,pi:1,kind:'cancel'});}catch(e){}
+      NET.unsubs.push(gdoc('-act').onSnapshot(handleAct,er),gdoc('-ans').onSnapshot(handleAns,er));
+    }
+    resSave();RES.busy=false;render();
+  }catch(e){RES.busy=false;RES.err=explainErr(e,'対戦にもどれませんでした');render();}
+}
+function resDrop(){const r=resGet();resClear();RES.err='';if(r&&r.role==='host'&&NET.db){try{NET.db.doc(`games/${r.code}`).set({phase:'closed',t:Date.now()});}catch(e){}}render();}
+/* 相手側：取り消しの合図が来たら、出ている質問画面を閉じる */
+{const _oa=onAsk;onAsk=function(snap){const d=snap.exists?snap.data():null;
+  if(d&&d.kind==='cancel'&&NET.askInit){NET.lastAsk=d.seq;UI.modal=null;UI.manaSel=null;render();return;}
+  return _oa(snap);};}
+/* 対戦が始まったら、もどるための情報を保存。自分で「やめる」を押したら消す */
+{const _sg=startGame;startGame=function(opt={}){const r=_sg(opt);if(opt.online)resSave();return r;};}
+{const _os=onState;onState=function(snap){const r=_os(snap);if(NET.role==='guest'&&G)resSave();return r;};}
+{const _lv=leaveNet;leaveNet=async function(msg){resClear();return _lv(msg);};}
+/* アプリを切りかえて戻ってきたとき、最新の盤面を取り直す */
+try{if(typeof document!=='undefined'&&document.addEventListener)document.addEventListener('visibilitychange',async()=>{
+  if(document.visibilityState!=='visible'||!NET.db||!NET.code)return;
+  try{if(NET.role==='guest'){const sn=await gdoc().get();onState(sn);}else if(NET.role==='host'&&G){NET.lastS=null;schedulePublish();}}catch(e){}
+});}catch(e){}
+/* メニューに「対戦にもどる」を出す */
+function resumeBox(){
+  const r=resGet();
+  if(!r||NET.role)return RES.err?`<div class="rsbox"><p class="warn">${esc(RES.err)}</p></div>`:'';
+  const ready=!!NET.db;
+  return `<div class="rsbox"><b>対戦の途中です</b><p>部屋番号 ${esc(r.code)}（${r.role==='host'?'あなたが作った部屋':'友だちの部屋'}）の対戦にもどれます。</p>
+    ${RES.err?`<p class="warn">${esc(RES.err)}</p>`:''}
+    <div class="rsbtn"><button class="primary big" onclick="resumeGame()" ${ready&&!RES.busy?'':'disabled'}>${RES.busy?'もどっています…':ready?'▶ 対戦にもどる':'接続しています…'}</button>
+    <button class="ghost" onclick="resDrop()">この対戦はやめる</button></div></div>`;
+}
+{const _t=titleHTML;titleHTML=function(){const h=_t();const b=resumeBox();if(!b)return h;return h.replace(/(<div class="title [^"]*">)/,'$1'+b);};}
+/* 接続ができたらメニューを描き直す（ボタンを押せるように） */
+{let k=0;const iv=setInterval(()=>{k++;if(NET.db||NET.db===null||k>120){clearInterval(iv);try{if(UI.screen==='title'&&!G&&resGet())render();}catch(e){}}},500);}
 
 </script>
 </body>
