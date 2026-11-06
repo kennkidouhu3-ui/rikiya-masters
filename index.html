@@ -331,6 +331,17 @@ button.big{font-size:18px;padding:14px 22px;margin-top:6px}
 .row.hand .card.ok::after{content:'使える'}
 .row.bz .card.ok::after{content:'⚔攻撃'}
 .row.hand,.row.bz{padding:4px 2px}
+/* 部屋一覧 */
+.nick{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin:4px 0 10px}
+.nick input{flex:1;min-width:0}
+.rmh{font-size:16px;margin:14px 0 6px}.rmh small{font-size:12px;color:var(--muted);font-weight:400;margin-left:6px}
+.rmlist{display:flex;flex-direction:column;gap:8px}
+.rmrow{display:flex;align-items:center;gap:10px;background:var(--panel);border:2px solid var(--btn);border-radius:14px;padding:10px 12px}
+.rmi{flex:1;display:flex;flex-direction:column;gap:2px;text-align:left}.rmi small{color:var(--muted);font-size:12px}
+.rmrow button{padding:12px 18px;font-size:16px}
+.rmnone{background:var(--panel2);border-radius:10px;padding:10px}
+.rmmake{width:100%}
+.rmcode{margin-top:12px;font-size:13px;color:var(--muted)}.rmcode summary{cursor:pointer}
 
 </style>
 </head>
@@ -11144,7 +11155,7 @@ titleHTML=function(){
     let deck=menuDeck().replace(/<label class="dkl"><b>CPUのデッキ<\/b>[\s\S]*?<\/label>/,'');
     const on=onlineHTML().replace('デッキは上で選んだ内容が、2人とも同じになります。','自分が使うデッキは、上の「あなたのデッキ」で選んだものです。');
     return `<div class="title mscr">${menuBack()}<h2 class="mh">友だちと対戦（オンライン）</h2>
-    <p class="msub">① 使うデッキを選ぶ　② 1人が「部屋をつくる」→ 出た合言葉を相手に伝える　③ 相手は合言葉を入れて「入る」</p>
+    <p class="msub">① 使うデッキを選ぶ　② 1人が「部屋をつくる」　③ もう1人は「待っている部屋」に出た部屋の「入る」を押すだけ</p>
     ${deck}${on}</div>`;
   }
   return `<div class="title mhome"><h1>カードバトル<br>練習場</h1>
@@ -11255,6 +11266,52 @@ gameHTML=function(){
 function mainOver(pi){return !!(G&&!G.effPlay&&G.cur===pi&&G.atkN&&G.atkN[pi]>0);}
 {const _po=playOptions;playOptions=function(pi,card,zone){const L=_po(pi,card,zone);if(!mainOver(pi))return L;return L.map(o=>o.why?o:Object.assign({},o,{why:'攻撃したあとは使えません'}));};}
 try{if(G&&UI.screen==='game')render();}catch(e){}
+
+/* ===== 部屋一覧（作った人の部屋を押すだけで入れる） ===== */
+const ROOMS={list:{},unsub:null,hb:null,err:''};
+const ROOM_TTL=15*60*1000;
+function roomsRef(){return NET.db.doc('games/ROOMS');}
+function myNick(){try{return localStorage.getItem('dm26nick')||'';}catch(e){return '';}}
+function setNick(v){try{localStorage.setItem('dm26nick',String(v||'').slice(0,12));}catch(e){}}
+function roomsStart(){
+  if(ROOMS.unsub||!NET.db)return;
+  try{ROOMS.unsub=roomsRef().onSnapshot(sn=>{const d=sn.exists?sn.data():null;ROOMS.list=(d&&d.rooms)||{};ROOMS.err='';if(UI.screen==='title'&&UI.menu==='online')render();},e=>{ROOMS.err='部屋一覧を読み込めませんでした';});}catch(e){}
+}
+function roomsOpen(){const now=Date.now();return Object.entries(ROOMS.list).filter(([c,r])=>r&&now-(r.t||0)<ROOM_TTL&&c!==NET.code).sort((a,b)=>(b[1].t||0)-(a[1].t||0));}
+async function roomPut(code){const nm=myNick()||'だれか';const d=UI.pSel&&UI.pSel.startsWith('o:')?OFFICIAL_DECKS[+UI.pSel.slice(2)].n:(UI.decks&&UI.decks[UI.dcur]?UI.decks[UI.dcur].name:'');
+  try{await roomsRef().set({rooms:{[code]:{name:nm,deck:String(d).slice(0,24),t:Date.now()}}},{merge:true});}catch(e){}}
+async function roomDel(code){if(!code||!NET.db)return;try{await roomsRef().update({['rooms.'+code]:firebase.firestore.FieldValue.delete()});}catch(e){}}
+function roomHB(on){clearInterval(ROOMS.hb);ROOMS.hb=null;if(on)ROOMS.hb=setInterval(()=>{if(NET.role==='host'&&UI.screen==='lobby'&&NET.code)roomPut(NET.code);else roomHB(false);},60000);}
+{const _ni=netInit;netInit=async function(){await _ni();roomsStart();};}
+{const _hc=hostCreate;hostCreate=async function(){try{const n=document.getElementById('nickin');if(n&&typeof n.value==='string')setNick(n.value.trim());}catch(e){}await _hc();if(NET.role==='host'&&NET.code){await roomPut(NET.code);roomHB(true);}};}
+{const _hj=handleJoin;handleJoin=function(snap){if(snap.exists&&NET.role==='host'&&NET.code){roomDel(NET.code);roomHB(false);}return _hj(snap);};}
+{const _lv=leaveNet;leaveNet=async function(msg){if(NET.role==='host'&&NET.code&&UI.screen==='lobby')await roomDel(NET.code);roomHB(false);return _lv(msg);};}
+try{if(typeof window!=='undefined'&&window.addEventListener)window.addEventListener('beforeunload',()=>{if(NET.role==='host'&&NET.code&&UI.screen==='lobby')roomDel(NET.code);});}catch(e){}
+async function roomJoin(code){try{const n=document.getElementById('nickin');if(n&&typeof n.value==='string')setNick(n.value.trim());}catch(e){}await guestJoin(code);if(NET.role==='guest')roomDel(code);}
+onlineHTML=function(){
+  if(NET.db===undefined)return `<div class="online"><b>オンライン対戦</b><p class="note">接続を確認しています…</p></div>`;
+  if(!NET.db)return `<div class="online"><b>オンライン対戦</b><p class="warn">オンライン機能に接続できませんでした。${NET.err?esc(NET.err):''}</p></div>`;
+  const blocked=NET.canWrite===false,dis=(blocked||NET.busy)?'disabled':'';
+  const L=roomsOpen();
+  const rows=L.length?L.map(([c,r])=>{const m=Math.max(0,Math.round((Date.now()-(r.t||0))/60000));return `<div class="rmrow"><div class="rmi"><b>${esc(r.name||'だれか')}さんの部屋</b><small>部屋番号 ${esc(c)}${r.deck?'・'+esc(r.deck):''}・${m<1?'いま':m+'分前'}</small></div><button class="primary" onclick="roomJoin('${esc(c)}')" ${dis}>入る</button></div>`;}).join(''):'<p class="note rmnone">いま、待っている部屋はありません。友だちに「部屋をつくる」を押してもらうと、ここに出てきます。</p>';
+  return `<div class="online">
+  <label class="nick">あなたの名前 <input id="nickin" maxlength="12" value="${esc(myNick())}" placeholder="例：りきや" autocomplete="off"></label>
+  ${blocked?`<p class="warn">${esc(WRITE_MSG)}</p>`:''}${NET.busy?'<p class="note">部屋をつくっています…</p>':''}${NET.err?`<p class="warn">${esc(NET.err)}</p>`:''}
+  <h3 class="rmh">待っている部屋 <small>押すだけで入れます</small></h3>
+  <div class="rmlist">${rows}</div>
+  <h3 class="rmh">自分で部屋をつくる</h3>
+  <button class="big rmmake" data-do="host" ${dis}>＋ 部屋をつくる（あなたが先攻）</button>
+  <details class="rmcode"><summary>部屋番号を入力して入る</summary><div class="join"><input id="codein" placeholder="部屋番号（5文字）" maxlength="8" autocomplete="off" autocapitalize="characters"><button data-do="join" ${dis}>入る</button></div></details>
+  </div>`;
+};
+lobbyHTML=function(){
+  return `<div class="title"><h1>対戦相手を待っています</h1><p class="sub">友だちの「友だちと対戦」画面に、<b>${esc(myNick()||'あなた')}さんの部屋</b>が出ています。<br>友だちはそれを押すだけで入れます。</p>
+  <p class="note">部屋番号</p><div class="code">${esc(NET.code||'')}</div>
+  ${NET.err?`<p class="warn">${esc(NET.err)}</p>`:''}
+  <p class="note">入室すると自動で対戦が始まります。このページを閉じると、部屋はなくなります。</p>
+  <button class="ghost" data-do="leave">やめる</button></div>`;
+};
+{let k=0;const iv=setInterval(()=>{k++;if(NET.db){roomsStart();clearInterval(iv);}else if(k>120||NET.db===null)clearInterval(iv);},500);}
 
 </script>
 </body>
