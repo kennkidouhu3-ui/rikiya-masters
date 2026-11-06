@@ -3200,7 +3200,7 @@ async function cpuTurn(pi){
 function turnOK(pi){return !!G&&!G.over&&G.cur===pi&&!G.busy&&(pi!==ME||(!UI.modal&&!UI.manaSel));}
 function myTurnOK(){return turnOK(ME);}
 async function doCharge(pi,uid){
-  if(!turnOK(pi)||G.charged)return;
+  if(!turnOK(pi)||G.charged||(G.atkN&&G.atkN[pi]>0)||G.mainT===G.turnNo)return;
   const P=G.p[pi],i=P.hand.findIndex(c=>c.uid===uid);if(i<0)return;
   const[c]=P.hand.splice(i,1);G.lastZone=G.lastZone||{};G.lastZone[c.uid]='hand';G.charged=true;G.busy=true;const me=await putMana(pi,c);if(D(c).chargeUntap&&me){me.tapped=false;log(`『${nameOf(c)}』はアンタップしてマナゾーンに置かれた`);}await charisma(pi,me);G.busy=false;
   log(`${P.name}は『${nameOf(c)}』をマナゾーンに置いた${isMultiCard(c)?'（多色なのでタップして置かれた）':''}`);
@@ -3211,7 +3211,7 @@ async function doPlay(pi,uid,key){
   const f=locate(pi,uid);if(!f)return;
   const op=playOptions(pi,f.card,f.zone).find(o=>o.key===key);
   if(!op||op.why)return;
-  if(pi===ME)UI.sheet=null;G.busy=true;render();
+  if(pi===ME)UI.sheet=null;G.busy=true;G.mainT=G.turnNo;render();
   try{await runPlay(pi,f.card,f.zone,key);if(!G.over)await zeroCheck();}catch(e){console.error(e);log('エラーが起きました：'+(e&&e.message));}
   if(await skipCheck(pi))return;
   if(!G.over){G.busy=false;render();}
@@ -10394,8 +10394,8 @@ DEFS.c1121={name:'勝熱夢双 モモキング',civ:['火','自然'],cost:5,powe
     for(let i=0;i<2&&P.mana.length;i++){const x=await choose(pi,`マナゾーンから手札に戻すカード（${i+1}/2）`,P.mana.map(m=>m.card),bigPick,true);if(!x)break;toHandFrom(pi,x,'mana');}
     let n=0;P.mana.forEach(m=>{if(m.tapped&&isJ(m.card)){m.tapped=false;n++;}});if(n)log(`マナゾーンのジョーカーズ${n}枚をアンタップした`);render();},
   async onMyAfterAttack(pi,c,a){if(!a.brk||c.ymT===G.turnNo)return;const P=G.p[pi];
-    const L=P.hand.filter(h=>DEFS[h.id].type==='c'&&playOptions(pi,h,'hand').some(o=>o.key==='c'&&!o.why));if(!L.length)return;
-    const h=await choose(pi,'勝熱夢双 モモキング：コストを支払って召喚するクリーチャー',L,bigPick,true);if(!h)return;c.ymT=G.turnNo;await runPlay(pi,h,'hand','c');}};
+    G.effPlay=true;let L;try{L=P.hand.filter(h=>DEFS[h.id].type==='c'&&playOptions(pi,h,'hand').some(o=>o.key==='c'&&!o.why));}finally{G.effPlay=false;}if(!L.length)return;
+    const h=await choose(pi,'勝熱夢双 モモキング：コストを支払って召喚するクリーチャー',L,bigPick,true);if(!h)return;c.ymT=G.turnNo;G.effPlay=true;try{await runPlay(pi,h,'hand','c');}finally{G.effPlay=false;}}};
 DEFS.c1122={name:'勝熱伝双 モモキングVS',civ:['光','火','自然'],cost:5,power:9000,type:'c',race:['ジョーカーズ','ヒーロー・ドラゴン','チーム切札'],kw:['sa','wbreaker'],kirifuda:4,fromMana:true,dmrOne:true,
   txt:['キリフダッシュ4（自分のクリーチャーの攻撃の終わりに、そのクリーチャーがその攻撃中にシールドをブレイクしていれば、このカードを4支払って実行してもよい）','このクリーチャーを自分のマナゾーンから召喚してもよい。','スピードアタッカー','W・ブレイカー','このクリーチャーが攻撃する時、自分の他のジョーカーズを1つマナゾーンに置いてもよい。そうしたら、ジョーカーズ・メクレイド8する。','自分の同名のDMRは2つ以上出せない。'],
   async onAttack(pi,c){const P=G.p[pi];const L=[...P.bz,...(P.ts||[])].filter(x=>x!==c&&isJ(x));if(!L.length)return;const x=await choose(pi,'マナゾーンに置く自分の他のジョーカーズ（置いたらジョーカーズ・メクレイド8）',L,weakPick,true);if(!x)return;const ok=await toOwner(x,'mana');if(ok===false||G.over)return;await mekuraid(pi,8,y=>isJ(y),'ジョーカーズ・メクレイド');}};
@@ -10971,7 +10971,7 @@ function sheetHTML(){
     if(f.zone==='bz')info=`<div class="now">現在のパワー ${powTxt(pow(inst))}${inst.under&&inst.under.length?`／下に${inst.under.length}枚`:''}${inst.pile&&inst.pile.length?`／下のカード${inst.pile.length}枚`:''}${inst.sick?'／召喚酔い':''}${inst.tapped?'／タップ':''}${inst.dive?'／ジャストダイバー中':''}${hasU(inst,'noAtk')?'／攻撃できない':''}${hasU(inst,'noBlock')?'／ブロックできない':''}${hasU(inst,'noUntap')?'／アンタップしない':''}${hasU(inst,'noDieBattle')?'／バトル中破壊されない':''}${sasaOf(inst)?`／ササゲール${sasaOf(inst)}`:''}${ignored(inst)?'／能力は無視されています':''}</div>`;
     if(f.pi===ME&&myTurnOK()){
       if(f.zone==='hand'){
-        if(!G.charged)btns+=`<button data-do="charge" data-uid="${s.uid}">マナにチャージ</button>`;
+        if(!G.charged&&!mainOver(ME)&&G.mainT!==G.turnNo)btns+=`<button data-do="charge" data-uid="${s.uid}">マナにチャージ</button>`;
         for(const op of playOptions(ME,inst,'hand')){
           btns+=`<button class="${op.why?'':'primary'}" ${op.why?'disabled':''} data-do="play" data-uid="${s.uid}" data-key="${op.key}">${esc(op.label)}</button>`;
           if(op.why)extra+=`<p class="warn">${esc(op.label)}：${esc(op.why)}</p>`;
@@ -11231,13 +11231,15 @@ function gameGuideHTML(){
   if(!my)return `<div class="gguide wait"><span class="gdot"></span>${NET.role?'相手':'CPU'}が考えています… しばらくお待ちください</div>`;
   if(G.busy)return `<div class="gguide wait"><span class="gdot"></span>処理中…</div>`;
   const P=G.p[ME];const un=P.mana.filter(m=>!m.tapped).length;
+  if(mainOver(ME))return `<div class="gguide">${'<span class="gst done">✓ ① マナ</span><i class="garr">›</i><span class="gst done">✓ ② カードを使う</span><i class="garr">›</i>'}<span class="gst ${P.bz.some(c=>canAtk(c))?'on':''}">③ 攻撃する</span><i class="garr">›</i><span class="gst ${P.bz.some(c=>canAtk(c))?'':'on'}">④ ターン終了</span></div><p class="ghint">攻撃したあとは、手札からカードを使ったりマナを置いたりできません（キリフダッシュなど、能力で出すものは使えます）。</p>`;
   const canPlay=P.hand.some(c=>playOptions(ME,c,'hand').some(o=>!o.why&&o.key!=='mana'));
   const canAtkAny=P.bz.some(c=>canAtk(c));
+  const chargeDone=G.charged||G.mainT===G.turnNo;
   const st=(done,on,t)=>`<span class="gst ${done?'done':''} ${on?'on':''}">${done?'✓ ':''}${t}</span>`;
   return `<div class="gguide">
-    ${st(G.charged,!G.charged,'① マナを1枚置く')}<i class="garr">›</i>${st(false,G.charged&&canPlay,'② カードを使う')}<i class="garr">›</i>${st(false,canAtkAny,'③ 攻撃する')}<i class="garr">›</i>${st(false,!canPlay&&!canAtkAny&&G.charged,'④ ターン終了')}
+    ${st(chargeDone,!chargeDone,G.charged||G.mainT!==G.turnNo?'① マナを1枚置く':'① マナ（置かずに進んだ）')}<i class="garr">›</i>${st(false,canPlay,'② カードを使う')}<i class="garr">›</i>${st(false,canAtkAny,'③ 攻撃する')}<i class="garr">›</i>${st(false,!canPlay&&!canAtkAny&&chargeDone,'④ ターン終了')}
     <span class="gmana">使えるマナ <b>${un}</b>/${P.mana.length}</span></div>
-    <p class="ghint">${G.charged?'':'手札のカードを押すと「マナに置く」が選べます（1ターンに1枚）。'}<span class="gok">緑に光っているカード</span>が、いま使える・攻撃できるカードです。カードを押すと能力も見られます。</p>`;
+    <p class="ghint">${chargeDone?'':'最初に、手札のカードを押して「マナにチャージ」ができます（1ターンに1枚）。カードを使ったり攻撃したりすると、もうマナは置けません。'}<span class="gok">緑に光っているカード</span>が、いま使える・攻撃できるカードです。カードを押すと能力も見られます。</p>`;
 }
 gameHTML=function(){
   const my=G.cur===ME&&!G.over;
@@ -11249,6 +11251,9 @@ gameHTML=function(){
   const mine=zoneHTML(ME).replace('<section class="zone mine">','<section class="zone mine"><div class="zhead me">あなたの場</div>');
   return hdr+gameGuideHTML()+msg+opp+`<div class="mid"></div>`+mine;
 };
+/* 攻撃したあとは、メインステップが終わっているので手札などからカードを使えない（マナも置けない） */
+function mainOver(pi){return !!(G&&!G.effPlay&&G.cur===pi&&G.atkN&&G.atkN[pi]>0);}
+{const _po=playOptions;playOptions=function(pi,card,zone){const L=_po(pi,card,zone);if(!mainOver(pi))return L;return L.map(o=>o.why?o:Object.assign({},o,{why:'攻撃したあとは使えません'}));};}
 try{if(G&&UI.screen==='game')render();}catch(e){}
 
 </script>
