@@ -1794,7 +1794,7 @@ async function leaveBZ(pi,c,dest,o={}){
   if(isCr&&D(c).selfSave&&!ignored(c)&&!o.noSave&&await D(c).selfSave(pi,c))return false;
   if(isCr&&hasU(c,'noLeave')){log(`『${nameOf(c)}』は次の自分のターンのはじめまで離れない`);return false;}
   if(isCr&&P.bz.some(x=>D(x).sforce&&!ignored(x)&&x.sfUid!=null&&P.shields.some(s=>s.uid===x.sfUid))){log(`シールド・フォース：『${nameOf(c)}』は離れない`);return false;}
-  if(isCr&&!o.noSave&&!G.leaveSaving){for(const x of [...P.bz,...P.ts]){if(x===c||ignored(x)||!D(x).leaveSave)continue;G.leaveSaving=true;let r=false;try{r=await D(x).leaveSave(pi,x,c,dest,o);}finally{G.leaveSaving=false;}if(r)return false;if(!P.bz.includes(c))return false;}}
+  if(isCr&&!o.noSave&&!G.leaveSaving){for(const x of [...P.bz,...P.ts]){if((x===c&&!D(x).saverSelf)||ignored(x)||!D(x).leaveSave)continue;G.leaveSaving=true;let r=false;try{r=await D(x).leaveSave(pi,x,c,dest,o);}finally{G.leaveSaving=false;}if(r)return false;if(!P.bz.includes(c))return false;}}
   if(isCr&&G.dgProt&&G.dgProt[pi]!=null&&!G.byBattle&&(G.cur!==pi||G.spellBy===1-pi)){log(`極限ファイナル革命：『${nameOf(c)}』は相手の効果では離れない`);return false;}
   const exL=P.shields.filter(s=>s.exOf===c.uid);
   if(isCr&&exL.length&&hasKw(c,'exLife')&&!G.costDestroy){
@@ -10517,6 +10517,128 @@ DEFS.c1136={name:'タイク・タイソンズ',civ:['自然'],cost:2,power:1000,
   txt:['Jチェンジ4（このクリーチャーが攻撃する時、このクリーチャーと自分のマナゾーンにあるコスト4以下のジョーカーズ1体を入れ替えてもよい）','このクリーチャーがバトルゾーンを離れた時、自分の山札の上から1枚目をマナゾーンに置く。'],
   async onLeave(pi){await manaTop(pi,1);}};
 {const _sl=summonLock;summonLock=function(pi,card){const d=card&&DEFS[card.id];if(d&&d.type==='c'&&d.cost!==INF&&d.cost<=4&&G&&G.p&&G.p.some(P=>P.bz.some(x=>D(x).noSummonLE4&&!ignored(x))))return true;return _sl(pi,card);};}
+UI.offCache={};
+CARD_IDS=Object.keys(DEFS).filter(k=>!DEFS[k].gr&&!DEFS[k].hidden).sort((a,b)=>+a.slice(1)-+b.slice(1));
+
+/* ===== カードデータ（c1137〜c1148：ボルシャック／ルピア／聖霊王 など） ===== */
+const q28FB=x=>hasR(x,'ファイアー・バード');
+const q28Psy=x=>!!(DEFS[x.id].fromHyper||hasR(x,'サイキック'));
+const q28Angel=x=>DEFS[x.id].type==='c'&&hasR(x,'エンジェル・コマンド');
+const q28Armored=x=>hasR(x,'アーマード');
+async function q28ArmMek(pi){await mekuraid(pi,5,q28Armored,'アーマード・メクレイド');}
+
+/* ボルシャック・ドラゴン（ツインパクト） */
+DEFS.c933.side={name:'決闘者・チャージャー',civ:['火'],cost:3,type:'s',charger:true,race:[],
+  txt:['自分の山札の上から3枚を表向きにする。その中から、名前に《ボルシャック》とあるカードをすべて手札に加え、残りを好きな順序で山札の下に置く。','チャージャー（この呪文を唱えた後、墓地のかわりにマナゾーンに置く）'],
+  async onCast(pi){const L=topN(pi,3);if(!L.length)return;log(`山札の上から${L.length}枚を表向きにした：${revealTxt(L)}`);
+    const t=L.filter(x=>DEFS[x.id].name.includes('ボルシャック')||(DEFS[x.id].side&&DEFS[x.id].side.name.includes('ボルシャック')));t.forEach(x=>G.p[pi].hand.push(plain(x)));
+    bottomAll(pi,L.filter(x=>!t.includes(x)));if(t.length)log(`${t.length}枚を手札に加えた`);render();}};
+
+DEFS.c1137={name:'クック・轟・ブルッチ',civ:['火'],cost:4,power:3000,type:'c',race:['アーマード・ファイアー・バード'],kw:['gstrike'],
+  grant:{sa:(x,c)=>isDragon(c)},
+  txt:['G・ストライク（このクリーチャーを自分のシールドゾーンから手札に加える時、相手に見せ、相手のクリーチャーを1体選んでもよい。このターン、そのクリーチャーは攻撃できない）','このクリーチャーが出た時、このターン次に使うアーマードのコストを6少なくする。ただしコストは0以下にならない。','自分のドラゴンすべてに「スピードアタッカー」を与える。'],
+  async onEnter(pi){G.nextSum.push({pi,red:6,kind:'armored',noSa:true});log('このターン、次に使うアーマードのコストが6少なくなる');}};
+
+DEFS.c1138={name:'ボルシャック・ハイパー・アークゼオス',civ:['火'],cost:5,power:3000,type:'c',race:['アーマード・ドラゴン','超化獣'],kw:[],st:true,
+  hyperize:1,hyper:{power:7000,kw:['wbreaker']},
+  txt:['S・トリガー','このクリーチャーが出た時、パワーの合計が7000以下になるように相手のクリーチャーを2体まで選び、破壊する。','ハイパー化：自分の他のクリーチャーを1体タップする。（自分のメインステップ中に、ハイパーモードを解放できる。ハイパーモードは次の自分のターンのはじめまで続く）','ハイパーモード：パワー7000／W・ブレイカー／このクリーチャーが攻撃する時、相手の「ブロッカー」を持つクリーチャーを1体選び、破壊する。'],
+  async onEnter(pi){const a=await chooseOpp(pi,'破壊する相手のクリーチャー（パワーの合計7000以下・1体目）',x=>pow(x)!==INF&&pow(x)<=7000,null,true);if(!a)return;
+    const rest=7000-pow(a);const b=await chooseOpp(pi,`破壊する相手のクリーチャー（2体目・パワー${rest}以下）`,x=>x!==a&&pow(x)!==INF&&pow(x)<=rest,null,true);
+    await massDestroy([a,b].filter(Boolean).map(x=>[x.owner,x]));},
+  async onAttack(pi,c){if(!c.hyper)return;const t=await chooseOpp(pi,'破壊する相手の「ブロッカー」を持つクリーチャー',x=>hasKw(x,'blocker'));if(t)await destroy(t.owner,t);}};
+
+DEFS.c1139={name:'ボルシャック・アークゼオス',civ:['火'],cost:5,power:5000,powTag:'+',type:'c',race:['アーマード・ドラゴン'],kw:['powered'],
+  powerPlus:c=>3000*G.p[c.owner].bz.filter(q28FB).length,
+  txt:['パワード・ブレイカー','自分のファイアー・バード1つにつき、このクリーチャーのパワーを+3000する。','このクリーチャーが出た時、アーマード・メクレイド5する。（自分の山札の上から3枚を見る。その中から、コスト5以下のアーマードを1枚、コストを支払わずに使ってもよい。残りを好きな順序で山札の下に置く）','各ターンに一度、自分のファイアー・バードが出た時、相手のクリーチャーを1体選んでもよい。その選んだクリーチャーとこのクリーチャーをバトルさせる。'],
+  async onEnter(pi){await q28ArmMek(pi);},
+  async onMyEnter(pi,c,e){if(!q28FB(e)||e.owner!==pi||c.azT===G.turnNo||!G.p[pi].bz.includes(c))return;
+    const t=await chooseOpp(pi,'アークゼオスとバトルさせる相手のクリーチャー（選ばなくてもよい）',null,l=>{const k=l.filter(x=>cmp(pow(x),pow(c))<0);return k.length?strongPick(k):null;},true);
+    if(!t)return;c.azT=G.turnNo;await battle(pi,c,t.owner,t);}};
+
+DEFS.c1140={name:'ボルシャック・NEX',civ:['火'],cost:6,power:6000,powTag:'+',type:'c',race:['アーマード・ドラゴン'],kw:['wbreaker'],
+  powerPlus:c=>G.atkUid===c.uid?1000*G.p[c.owner].grave.filter(q28FB).length:0,
+  txt:['このクリーチャーをバトルゾーンに出した時、自分の山札を見る。その中から、名前に《ルピア》とあるカードを1枚、バトルゾーンに出してもよい。その後、山札をシャッフルする。','このクリーチャーは、自分の墓地にあるファイアー・バード1体につき「パワーアタッカー+1000」を得る。','W・ブレイカー'],
+  async onEnter(pi){const P=G.p[pi];const x=await choose(pi,'山札からバトルゾーンに出す、名前に《ルピア》とあるカード',searchable(pi).filter(y=>DEFS[y.id].name.includes('ルピア')&&nonEvo(y)&&!putBlocked(pi,y)),bigPick,true);
+    if(x){zoneRemove(pi,x,'deck');shuffle(P.deck);await putOnBZ(pi,plain(x),{summon:false});}else{shuffle(P.deck);log('山札をシャッフルした');render();}}};
+
+DEFS.c1141={name:'凰翔竜機バルキリー・ルピア',civ:['光','火'],cost:5,power:5000,type:'c',race:['アーマード・ドラゴン','ファイアー・バード'],kw:[],
+  evo:{kind:'one',test:x=>hasR(x,'アーマード・ドラゴン')||q28FB(x),label:'自分のアーマード・ドラゴンまたはファイアー・バード'},
+  txt:['進化：自分のアーマード・ドラゴンまたはファイアー・バード1体の上に置く。','このクリーチャーがバトルゾーンに出た時、自分の山札を見る。その中からドラゴンを1体選び、相手に見せてから自分の手札に加えてもよい。その後、山札をシャッフルする。'],
+  async onEnter(pi){await deckSearch(pi,x=>DEFS[x.id].type==='c'&&isDragon(x),'山札から手札に加えるドラゴン');}};
+
+DEFS.c1142={name:'覇炎竜 ボルシャック・ライダー',civ:['火'],cost:7,power:9000,type:'c',race:['アーマード・ドラゴン'],kw:['sa','wbreaker'],saverSelf:true,
+  txt:['スピードアタッカー','W・ブレイカー','自分のファイアー・バードすべてに「セイバー：ドラゴン」を与える。（自分のドラゴンが破壊される時、「セイバー：ドラゴン」を持つクリーチャーを1体、かわりに破壊してもよい）','このクリーチャーの各ブレイクの前に、アーマード・メクレイド5する。（自分の山札の上から3枚を見る。その中から、コスト5以下のアーマードを1枚、コストを支払わずに使ってもよい。残りを好きな順序で山札の下に置く）'],
+  preBreak:async(pi)=>{await q28ArmMek(pi);},
+  async leaveSave(pi,x,c,dest,o){if(!o||!o.destroy||c.owner!==pi||!isDragon(c))return false;const P=G.p[pi];
+    const L=P.bz.filter(y=>y!==c&&q28FB(y)&&D(y).type==='c');if(!L.length)return false;
+    const s=await choose(pi,`セイバー：ドラゴン：『${nameOf(c)}』のかわりに破壊するファイアー・バード（選ばないなら、そのまま破壊）`,L,weakPick,true);if(!s)return false;
+    G.leaveSaving=false;await destroy(pi,s);G.leaveSaving=true;log(`『${nameOf(c)}』は破壊されなかった`);return true;}};
+
+DEFS.c1143={name:'ボルシャック・スーパーヒーロー',civ:['火'],cost:6,power:6000,type:'c',race:['アーマード・ドラゴン','ハンター'],kw:['wbreaker'],
+  txt:['W・ブレイカー','このクリーチャーが出た時、パワー3000以下のサイキックではないクリーチャーをすべて破壊する。その後、パワー5000以下のサイキック・クリーチャーをすべて破壊する。'],
+  async onEnter(pi){const L1=[0,1].flatMap(q=>G.p[q].bz.filter(x=>D(x).type==='c'&&!q28Psy(x)&&pow(x)!==INF&&pow(x)<=3000).map(x=>[q,x]));if(L1.length)await massDestroy(L1);if(G.over)return;
+    const L2=[0,1].flatMap(q=>G.p[q].bz.filter(x=>D(x).type==='c'&&q28Psy(x)&&pow(x)!==INF&&pow(x)<=5000).map(x=>[q,x]));if(L2.length)await massDestroy(L2);},
+  side:{name:'超英雄タイム',civ:['火'],cost:2,type:'s',race:[],txt:['バトルゾーンにある相手のコスト3以下のカードを1枚選び、破壊する。'],
+    async onCast(pi){const t=await chooseOppElem(pi,'破壊する相手のコスト3以下のカード',x=>cc(x)!==INF&&cc(x)<=3);if(t)await destroy(1-pi,t);}}};
+
+DEFS.c1144={name:'ボルシャックライシス・NEX',civ:['火'],cost:15,power:25000,type:'c',race:['メガ・アーマード・コマンド・ドラゴン','ハンター'],kw:['worldBreaker'],
+  symp:pi=>2*G.p[pi].bz.filter(x=>D(x).type==='c'&&isDragon(x)).length,sympMin:1,
+  grant:{sa:(x,c)=>isDragon(c)},
+  txt:['ダブル・シンパシー：ドラゴン・クリーチャー（このクリーチャーの召喚コストを、自分のドラゴン・クリーチャー1体につき2少なくする。ただしコストは0以下にはならない）','ワールド・ブレイカー（このクリーチャーは相手のシールドをすべてブレイクする）','自分のドラゴンすべてに「スピードアタッカー」を与える。','自分のドラゴンが攻撃する時、自分の山札の上から1枚を表向きにする。それがドラゴンなら出してもよい。'],
+  async onMyAttack(pi,x,a){if(!isDragon(a))return;const P=G.p[pi];const t=P.deck[P.deck.length-1];if(!t)return;log(`ボルシャックライシス・NEX：山札の上の『${nameOf(t)}』を表向きにした`);
+    if(DEFS[t.id].type==='c'&&isDragon(t)&&nonEvo(t)&&!putBlocked(pi,t)&&await askYN(pi,`『${nameOf(t)}』を出しますか？`,t,true)){zoneRemove(pi,t,'deck');await putOnBZ(pi,plain(t),{summon:false});}else render();}};
+
+DEFS.c1145={name:'聖霊王アルファディオス',civ:['光'],cost:10,power:15500,type:'c',race:['エンジェル・コマンド'],kw:['gstrike','tbreaker'],alphaLock:true,
+  evo:{kind:'one',test:q28Angel,label:'エンジェル・コマンド・クリーチャー'},
+  txt:['G・ストライク','進化：エンジェル・コマンド・クリーチャー1体の上に置く。','T・ブレイカー','すべてのプレイヤーは、光ではない、クリーチャーまたは呪文を実行できない。']};
+
+DEFS.c1146={name:'聖霊王ドリーム・アルカディアス',civ:['光'],cost:7,power:12500,type:'c',race:['エンジェル・コマンド'],kw:['blocker','tbreaker','escape'],
+  evo:{kind:'one',test:q28Angel,label:'エンジェル・コマンド・クリーチャー'},
+  txt:['進化：エンジェル・コマンド・クリーチャー1体の上に置く。','ブロッカー','T・ブレイカー','エスケープ（このクリーチャーが破壊される時、かわりに自分のシールドを1つ手札に加えてもよい）','このクリーチャーがタップしていれば、自分はゲームに負けない。'],
+  async loseSave(li,x,msg){if(!x.tapped)return false;const k=li+':'+G.turnNo;G.arcLog=G.arcLog||{};if(!G.arcLog[k]){G.arcLog[k]=1;log(`聖霊王ドリーム・アルカディアスがタップしているので、${G.p[li].name}はゲームに負けない（${msg}）`);render();}return true;}};
+
+DEFS.c1147={name:'サファイア・ウィズダム',civ:['水'],cost:9,power:15000,type:'c',race:['エンジェル・コマンド','スターノイド'],kw:['tbreaker'],sapLock:true,
+  evo:{kind:'one',test:q28Angel,label:'エンジェル・コマンド・クリーチャー'},
+  txt:['進化：エンジェル・コマンド・クリーチャー1体の上に置く。','T・ブレイカー','相手がクリーチャーまたは呪文を実行した時、自分はカードを2枚引く。','相手は、自分の手札の枚数以下のコストを持つクリーチャーまたは呪文を実行できない。'],
+  async onOppPlay(pi,x,card,d){if(d&&(d.type==='c'||d.type==='s')){log('サファイア・ウィズダム：カードを2枚引く');await draw(pi,2);}}};
+
+DEFS.c1148={name:'極限の精霊インフィニティ・シリウス',civ:['光','水'],cost:INF,power:INF,type:'c',race:['エンジェル・コマンド'],kw:['infBreaker','blocker','justDiver'],
+  grant:{unblockable:(x,c)=>q28Angel(c)&&cc(c)!==INF&&cc(c)<=8},
+  alt:{label:'自分のエンジェル・コマンド・クリーチャーを5体タップして、コストを支払わずに召喚する',
+    why:(pi,card)=>{if(putBlocked(pi,card))return '今は出せません';const sl=summonLock(pi,card);if(sl)return sl;return G.p[pi].bz.filter(x=>q28Angel(x)&&!x.tapped).length>=5?'':'アンタップしているエンジェル・コマンド・クリーチャーが5体必要です';},
+    async run(pi,card){const P=G.p[pi];const sel=[];for(let i=0;i<5;i++){const L=P.bz.filter(x=>q28Angel(x)&&!x.tapped&&!sel.includes(x));const x=await choose(pi,`タップするエンジェル・コマンド（${i+1}/5）`,L,weakPick);if(!x)return false;sel.push(x);}
+      sel.forEach(x=>x.tapped=true);log('エンジェル・コマンドを5体タップした');G.playN[pi]++;if(P.hand.includes(card))await playCard(pi,card,{free:true,from:'hand',face:'c',via:'alt'});return true;}},
+  altCpu:pi=>G.p[pi].bz.filter(x=>q28Angel(x)&&!x.tapped).length>=5,
+  txt:['コストを支払うかわりに、自分のエンジェル・コマンド・クリーチャーを5体タップして、このクリーチャーを召喚してもよい。','∞ブレイカー（「∞ブレイカー」を持つクリーチャーは、相手のシールドを好きな数ブレイクできる）','ブロッカー','ジャストダイバー','自分のコスト8以下のエンジェル・コマンドは攻撃もブロックもされず、呪文によって相手に選ばれない。']};
+
+DEFS.c1149={name:"クリスタル・ツヴァイランサー P'S",civ:['水'],cost:8,power:13000,type:'c',race:['リキッド・ピープル'],kw:['justDiver','tbreaker'],
+  evo:{kind:'one',test:x=>DEFS[x.id].type==='c'&&hasR(x,'リキッド・ピープル'),label:'リキッド・ピープル・クリーチャー'},
+  freeIf:pi=>G.p[pi].bz.filter(x=>hasR(x,'リキッド・ピープル')).length>=4,
+  grant:{unblockable:(x,c)=>hasR(c,'リキッド・ピープル')},
+  txt:['G・ゼロ：自分のリキッド・ピープルが4つ以上あれば、このクリーチャーをコストを支払わずに召喚してもよい。','進化：リキッド・ピープル・クリーチャー1体の上に置く。','ジャストダイバー','T・ブレイカー','自分のリキッド・ピープルはブロックされない。']};
+
+/* ---- 共通の処理 ---- */
+/* 次に使うアーマードのコストを少なく */
+{const _ns=nsTest;nsTest=function(b,card){if(b.kind==='armored')return q28Armored(card);return _ns(b,card);};}
+/* 実行できないカード（アルファディオス・サファイア・ウィズダム） */
+function q28ExecBan(pi,d){
+  if(!G||!G.p||!d||(d.type!=='c'&&d.type!=='s'))return '';
+  if(!(d.civ||[]).includes('光')&&G.p.some(P=>P.bz.some(x=>D(x).alphaLock&&!ignored(x))))return '聖霊王アルファディオス：光ではないクリーチャーや呪文は実行できません';
+  const O=G.p[1-pi];if(O&&d.cost!==INF&&O.bz.some(x=>D(x).sapLock&&!ignored(x))&&d.cost<=O.hand.length)return `サファイア・ウィズダム：相手の手札の枚数（${O.hand.length}）以下のコストのクリーチャーや呪文は実行できません`;
+  return '';
+}
+{const _sb=spellBanned;spellBanned=function(pi,sd){if(sd&&q28ExecBan(pi,sd))return true;return _sb(pi,sd);};}
+{const _po=playOptions;playOptions=function(pi,card,zone){const out=_po(pi,card,zone);
+  try{const skip=['hyperize','tapab','cross','crossFree','galaxy'];const d=D(card);
+    out.forEach(o=>{if(o.why||skip.includes(o.key))return;const f=(o.key==='s'||o.key==='rinne')&&d.side?d.side:d;const r=q28ExecBan(pi,f);if(r)o.why=r;});}catch(e){}
+  return out;};}
+{const _pc=playCard;playCard=async function(pi,card,o={}){const face=o.face||'c',d=defOf(card,face),from=o.from||'hand';
+  if(d.type==='c'&&o.summon!==false&&from!=='deckfx'){const r=q28ExecBan(pi,d);if(r){log(`『${d.name}』は実行できなかった（${r}）`);render();return;}}
+  return _pc(pi,card,o);};}
+/* インフィニティ・シリウス：自分のコスト8以下のエンジェル・コマンドは、攻撃されず、相手の呪文で選ばれない */
+const q28SirProt=(q,x)=>q28Angel(x)&&cc(x)!==INF&&cc(x)<=8&&G.p[q].bz.some(y=>y.id==='c1148'&&!ignored(y));
+{const _tg=targetable;targetable=function(pi){const L=_tg(pi);if(!G||G.spellBy!==pi)return L;return L.filter(x=>!q28SirProt(1-pi,x));};}
+{const _to=targetOptions;targetOptions=function(pi,a){return _to(pi,a).filter(o=>!(o.value&&o.value.kind==='creature'&&o.value.c&&q28SirProt(1-pi,o.value.c)));};}
 UI.offCache={};
 CARD_IDS=Object.keys(DEFS).filter(k=>!DEFS[k].gr&&!DEFS[k].hidden).sort((a,b)=>+a.slice(1)-+b.slice(1));
 
