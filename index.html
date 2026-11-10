@@ -966,7 +966,7 @@ const isDragon=c=>hasR(c,'ドラゴン');
 const isCmd=c=>hasR(c,'コマンド');
 const isMulti=c=>DEFS[c.id].civ.length>1;
 /* ツインパクト：バトルゾーンではクリーチャー側の文明だけ。手札・マナ・墓地などでは上下両方の文明 */
-const civOf=c=>{const d=DEFS[c.id];if(!d.side)return d.civ;if(c.owner!==undefined&&G&&G.p&&G.p[c.owner]&&G.p[c.owner].bz.includes(c))return d.civ;return [...new Set([...d.civ,...d.side.civ])];};
+const civOf=c=>{if(G&&G.allCiv29&&G.allCiv29===c.uid)return ['光','水','闇','火','自然'];const d=DEFS[c.id];if(!d.side)return d.civ;if(c.owner!==undefined&&G&&G.p&&G.p[c.owner]&&G.p[c.owner].bz.includes(c))return d.civ;return [...new Set([...d.civ,...d.side.civ])];};
 const isMultiCard=c=>civOf(c).length>1;
 const ALL5=['光','水','闇','火','自然'];
 const rainbowOn=q=>!!G&&G.p[q].bz.some(x=>D(x).rainbowMana&&!ignored(x));
@@ -980,9 +980,10 @@ const costTxt=v=>v===INF?'∞':v;
 const powTxt=v=>v===INF?'∞':v;
 const allBZ=()=>[...G.p[0].bz,...G.p[1].bz];
 const hasU=(c,k)=>!!c.u&&c.u[k]!==undefined;
+function q29SoldierProt(pi,x){if(ignored(x)||!(x.under||[]).some(u=>DEFS[u.id]&&DEFS[u.id].soulHexCost))return false;let sc=null;if(G.spellBy===pi&&G.spellDefCur)sc=G.spellDefCur.cost;else if(G.curSrc&&G.curSrc.owner===pi)sc=cc(G.curSrc);return sc!==null&&sc!==INF&&cc(x)!==INF&&sc<=cc(x);}
 function targetable(pi){
   const sp=G.spellBy===pi,O=G.p[1-pi],ed=sp&&O.bz.some(t=>t.hyper&&D(t).hyper&&D(t).hyper.dragonSpellGuard&&!ignored(t));
-  const L=O.bz.filter(x=>!(D(x).monoHex&&!ignored(x)&&(sp?!(G.spellDefCur&&(G.spellDefCur.civ||[]).length>1):!!(G.curSrc&&G.curSrc.owner===pi&&!isMultiCard(G.curSrc))))&&!x.dive&&!(D(x).hexproof&&!ignored(x))&&!(sp&&(hasU(x,'noSpellTgt')||(D(x).spellHex&&!ignored(x))))&&!(ed&&isDragon(x)));
+  const L=O.bz.filter(x=>!(D(x).monoHex&&!ignored(x)&&(sp?!(G.spellDefCur&&(G.spellDefCur.civ||[]).length>1):!!(G.curSrc&&G.curSrc.owner===pi&&!isMultiCard(G.curSrc))))&&!x.dive&&!(D(x).hexproof&&!ignored(x))&&!q29SoldierProt(pi,x)&&!(sp&&(hasU(x,'noSpellTgt')||(D(x).spellHex&&!ignored(x))))&&!(ed&&isDragon(x)));
   const t=L.filter(x=>D(x).taunt&&!ignored(x));
   return t.length?t:L;
 }
@@ -1017,6 +1018,7 @@ function hasKw(c,k){
   if(isLinked(c)&&!c._lk){for(const x of linkMembers(c)){x._lk=1;const r=hasKw(x,k);x._lk=0;if(r)return true;}return false;}
   if(ignored(c))return false;
   if((D(c).kw||[]).includes(k))return true;
+  if(c.under&&c.under.length&&c.under.some(u=>DEFS[u.id]&&DEFS[u.id].soulKw&&DEFS[u.id].soulKw.includes(k)))return true;
   if(c.gk&&c.gk.includes(k))return true;
   if(hasU(c,k))return true;
   if(c.hyper&&D(c).hyper&&(D(c).hyper.kw||[]).includes(k))return true;
@@ -1026,6 +1028,7 @@ function hasKw(c,k){
     if(ignored(x))continue;
     const g=D(x).grant;
     if(g&&g[k]&&g[k](x,c))return true;
+    for(const u of (x.under||[])){const sg=DEFS[u.id]&&DEFS[u.id].soulGrant;if(sg&&sg[k]&&sg[k](x,c))return true;}
   }
   for(const u of (c.under||[])){const s=DEFS[u.id].soulKw;if(s&&s.includes(k))return true;}
   return false;
@@ -1044,7 +1047,8 @@ function pow(c,atk){
   }
   if(c.owner!==undefined&&d.powerPlus&&!ignored(c))v+=d.powerPlus(c)||0;
   if(c.owner!==undefined&&d.powerAtk&&!ignored(c)&&G.atkUid===c.uid)v+=d.powerAtk;
-  if(c.owner!==undefined&&G&&G.p){for(const y of [...G.p[c.owner].bz,...(G.p[c.owner].ts||[])]){if(y!==c&&!ignored(y)&&D(y).auraPow)v+=D(y).auraPow(y,c)||0;}
+  if(c.owner!==undefined&&G&&G.p){for(const y of [...G.p[c.owner].bz,...(G.p[c.owner].ts||[])]){if(y!==c&&!ignored(y)&&D(y).auraPow)v+=D(y).auraPow(y,c)||0;if(!ignored(y))for(const u of (y.under||[])){const sd=DEFS[u.id];if(sd&&sd.soulAuraPow)v+=sd.soulAuraPow(y,c)||0;}}
+    if(!ignored(c))for(const u of (c.under||[])){const sd=DEFS[u.id];if(sd&&sd.soulPow)v+=sd.soulPow;if(sd&&sd.soulPowF)v+=sd.soulPowF(c)||0;}
     if(c.atkP&&c.atkP.t===G.turnNo&&G.atkUid===c.uid)v+=c.atkP.v;
     for(const ab of ((G.atkBuff&&G.atkBuff[c.owner])||[]))if(ab.t===G.turnNo&&(!ab.atk||(G.atkUid!=null&&G.cur===c.owner)))v+=ab.v;}
   if(c.owner!==undefined&&d.battlePlus&&!ignored(c)&&G.battling&&G.battling.includes(c))v+=d.battlePlus(c)||0;
@@ -1153,6 +1157,7 @@ function costOf(pi,card,face,from,mod){
   if(c===INF)return INF;
   if(from==='grave'&&d.recycle!==undefined)c=d.recycle;
   const P=G.p[pi];
+  for(const x of [...P.bz,...(P.ts||[])]){if(!ignored(x)&&D(x).allRedAny)c-=D(x).allRedAny(pi,card,x,face)||0;}
   if(d.type==='c'&&face!=='s'){
     for(const x of P.bz){
       if(ignored(x))continue;
@@ -1251,8 +1256,9 @@ function evoPool(pi,card){
   if(t.zone==='mana')return P.mana.map(m=>m.card).filter(x=>x.uid!==card.uid&&DEFS[x.id].type==='c'&&t.test(x));
   if(t.zone==='hand')return P.hand.filter(x=>x.uid!==card.uid&&DEFS[x.id].type==='c'&&t.test(x));
   if(t.zone==='grave')return P.grave.filter(x=>x.uid!==card.uid&&DEFS[x.id].type==='c'&&t.test(x));
-  return [...P.bz,...(P.ts||[]).filter(x=>D(x).shinka)].filter(x=>x.id!=='c27'&&x.uid!==card.uid&&t.test(x));
+  return [...P.bz,...(P.ts||[]).filter(x=>D(x).shinka)].filter(x=>x.id!=='c27'&&x.uid!==card.uid&&(t.test(x)||q29AllCiv(pi,x,t)));
 }
+function q29AllCiv(pi,x,t){if(!G.p[pi].bz.includes(x)||!G.p[pi].bz.some(y=>D(y).kumpu&&!ignored(y)))return false;G.allCiv29=x.uid;try{return !!t.test(x);}finally{G.allCiv29=null;}}
 function evoFeasible(pi,card){
   const d=D(card);
   if(!d.evo)return true;
@@ -1746,8 +1752,13 @@ async function evolveInto(pi,card,srcs,o){
   for(const s of live){
     const arr=P.bz.includes(s)?P.bz:P.ts;arr.splice(arr.indexOf(s),1);under.push(plain(s),...(s.under||[]));(s.seals||[]).forEach(x=>P.grave.push(plain(x)));s.seals=[];
     if(DEFS[s.id].shinkaPower&&!ignored(s))sw=true;
+    if(DEFS[s.id].onBecomeSrc&&!ignored(s))(G.srcQ29=G.srcQ29||[]).push([pi,s.id]);
+    if(!ignored(s)&&(DEFS[s.id].machOnSrc||(s.under||[]).some(u=>DEFS[u.id]&&DEFS[u.id].machOnSrc)))G.machSrc29=true;
   }
-  return putOnBZ(pi,card,Object.assign({},o,{under,tapped,sick,evolved:true,shinkaWin:sw}));
+  const ms29=G.machSrc29;G.machSrc29=false;const r29=await putOnBZ(pi,card,Object.assign({},o,{under,tapped,sick,evolved:true,shinkaWin:sw}));
+  if(ms29&&r29&&r29.uid!==undefined){r29.gk=r29.gk||[];r29.gk.push('mach');log(`『${nameOf(r29)}』はこのターン「マッハファイター」を得た`);}
+  for(const [q,id] of (G.srcQ29||[]).splice(0)){if(G.over)break;await DEFS[id].onBecomeSrc(q);}
+  return r29;
 }
 const costv=x=>D(x).cost===INF?1000:D(x).cost;
 async function offerHandEnter(pi,just){
@@ -1845,6 +1856,11 @@ async function leaveBZ(pi,c,dest,o={}){
       const out=[P.shields.pop(),P.shields.pop()];out.forEach(s=>P.hand.push(plain(s)));log(`『${nameOf(c)}』は離れず、かわりにシールドを2つ手札に加えた`);render();await shieldsGone(pi,out);return false;
     }
   }
+  if(o.destroy&&!o.noSaver&&!c.replDie&&civOf(c).filter(v=>v!=='無').length>1){const ws=P.bz.find(x=>x!==c&&D(x).saverMulti&&!ignored(x));
+    if(ws&&await askYN(pi,`セイバー：多色エレメント：『${nameOf(c)}』が破壊されるかわりに、『${nameOf(ws)}』を破壊しますか？`,c,cc(c)>cc(ws))){log(`セイバー！ かわりに『${nameOf(ws)}』が破壊される`);ws.replDie=true;await destroy(pi,ws);delete ws.replDie;return false;}}
+  if(isCr&&!o.noSaver&&!ignored(c)){for(const u of (c.under||[])){const ud=DEFS[u.id];if(!ud)continue;
+    if(ud.soulTapSave&&!c.tapped&&await askYN(pi,`${ud.name}（超魂X）：『${nameOf(c)}』が離れるかわりに、タップしますか？`,c,true)){c.tapped=true;log(`『${nameOf(c)}』は離れるかわりにタップされた`);render();return false;}
+    if(ud.soulManaSave&&dest!=='mana'&&await askYN(pi,`${ud.name}（超魂X）：『${nameOf(c)}』を、かわりにタップしてマナゾーンに置きますか？`,c,dest!=='hand')){const uid=c.uid;const r=await leaveBZ(pi,c,'mana',Object.assign({},o,{noSaver:true,destroy:false}));P.mana.forEach(m=>{if(m.card.uid===uid)m.tapped=true;});log('かわりにタップしてマナゾーンに置いた');render();return r;}}}
   if(isCr&&isDragon(c)&&!o.noSaver){
     const us=P.ts.find(x=>D(x).ultraSaver&&!ignored(x));
     if(us&&await askYN(pi,`ウルトラ・セイバー：『${nameOf(c)}』が離れるかわりに、『${nameOf(us)}』を破壊しますか？`,c,cc(c)>=5)){
@@ -2175,11 +2191,13 @@ async function playCard(pi,card,o={}){
     if(h&&up&&await askYN(1-pi,`ヒカリスマ：表向きのシールドを1枚裏向きにして、『${d.name}』を実行させずに墓地に置きますか？`,card,true)){
       up.up=false;G.p[o.ownerPi!==undefined?o.ownerPi:pi].grave.push(plain(card));log(`ヒカリスマ！ 『${d.name}』は実行されず、墓地に置かれた`);render();return;
     }
+    G.dfT=G.dfT||{};const dh=O.bz.find(x=>x.tapped&&!ignored(x)&&G.dfT[x.uid]!==G.turnNo&&(x.under||[]).some(u=>DEFS[u.id]&&DEFS[u.id].soulManaCounter));
+    if(dh&&await askYN(1-pi,`デル・フィンの虹勲章（超魂X）：『${d.name}』を実行するかわりに、持ち主のマナゾーンに置きますか？`,card,true)){G.dfT[dh.uid]=G.turnNo;await putMana(o.ownerPi!==undefined?o.ownerPi:pi,plain(card),false);log(`『${nameOf(dh)}』の能力：『${d.name}』は実行されず、マナゾーンに置かれた`);render();return;}
   }
   if(o.free&&(d.type==='s'||d.type==='c'))G.freePlayed[pi]=true;
   if(o.free&&G.cur===pi&&o.via!=='trigger'&&G.p[1-pi].bz.some(x=>D(x).obri&&!ignored(x))){const L=G.p[pi].bz;log('オブリ&レイト：マナをタップせずに実行したので、自分のクリーチャーを1体破壊する');const x=await choose(pi,'破壊する自分のクリーチャー',L,weakPick);if(x)await destroy(pi,x);if(G.over)return;}
   if(o.free&&d.type==='s'){G.freeSpellT=G.freeSpellT||[null,null];G.freeSpellT[pi]=G.turnNo;}
-  if(d.type!=='c'){G.ncT=G.ncT||[null,null];G.ncT[pi]=G.turnNo;}
+  if(d.type!=='c'){G.ncT=G.ncT||[null,null];G.ncT[pi]=G.turnNo;G.ncC=G.ncC||{};const k29=pi+':'+G.turnNo;G.ncC[k29]=(G.ncC[k29]||0)+1;}
   if(d.type==='c'||d.type==='s'){G.execN=G.execN||[0,0];G.execN[pi]++;}
   if(d.type==='s'){
     const dst=G.p[o.ownerPi!==undefined?o.ownerPi:pi];
@@ -2309,7 +2327,7 @@ async function breakShields(ai,att){
   const oi=1-ai,O=G.p[oi];
   let n=worldBr(att)?O.shields.length:breakCount(att);
   if(O.shields.some(s=>s.up&&DEFS[s.id].rose)&&n>1){n=1;log('ローズ・キャッスル：相手のクリーチャーは、1度に1つしかシールドをブレイクできない');}
-  const pb=[D(att).preBreak,att.hyper&&D(att).hyper&&D(att).hyper.preBreak].filter(Boolean);
+  const pb=[D(att).preBreak,att.hyper&&D(att).hyper&&D(att).hyper.preBreak,...(ignored(att)?[]:(att.under||[]).map(u=>DEFS[u.id]&&DEFS[u.id].soulPreBreak))].filter(Boolean);
   if(pb.length&&!ignored(att)&&!(D(att).dwbSava||D(att).dwb||D(att).millInstead)){for(let k=0;k<n&&O.shields.length&&!G.over;k++){for(const f of pb){if(G.over)return;await f(ai,att);}if(G.over)return;await breakSome(ai,oi,att,1);}return;}
   if(D(att).dwbSava&&!ignored(att)){
     log('ドラゴン・W・ブレイカー！');
@@ -2590,12 +2608,13 @@ async function attack(ai,a,t){
     }
     for(const h of [...P.hand]){
       if(G.over||!P.bz.includes(a))break;
-      const hd=D(h);if(!(hd.ddd||hd.dddGrave)||!P.hand.includes(h)||putBlocked(ai,h))continue;
-      if(hd.dddGrave){if(P.grave.length<hd.dddGrave)continue;if(!await askYN(ai,`D・D・D：墓地のカード${hd.dddGrave}枚を山札の下に置いて『${hd.name}』を手札から出しますか？`,h,true))continue;const gL=shuffle(P.grave.splice(0,hd.dddGrave));gL.forEach(x=>P.deck.unshift(x));log(`墓地のカード${hd.dddGrave}枚をシャッフルして山札の下に置いた`);}
-      else{const dc=typeof hd.ddd==='function'?hd.ddd(ai,a):hd.ddd;if(dc===null||dc===undefined||dc===false)continue;const dcv=hd.dddCiv||civsOf(hd);if(!canPay(ai,dc,dcv))continue;
+      const hd=D(h);if(!(hd.ddd||hd.dddGrave||hd.dddDisc)||!P.hand.includes(h)||putBlocked(ai,h))continue;
+      if(hd.dddDisc){const dL=P.hand.filter(x=>x!==h&&civOf(x).includes(hd.dddDisc));if(!dL.length)continue;if(!await askYN(ai,`D・D・D：${hd.dddDisc}のカードを1枚手札から捨てて『${hd.name}』を手札から出しますか？`,h,true))continue;const dx=await choose(ai,`捨てる${hd.dddDisc}のカード`,dL,cpuDiscardPick);if(!dx)continue;await discardCard(ai,dx);if(!P.hand.includes(h))continue;}
+      else if(hd.dddGrave){if(P.grave.length<hd.dddGrave)continue;if(!await askYN(ai,`D・D・D：墓地のカード${hd.dddGrave}枚を山札の下に置いて『${hd.name}』を手札から出しますか？`,h,true))continue;const gL=shuffle(P.grave.splice(0,hd.dddGrave));gL.forEach(x=>P.deck.unshift(x));log(`墓地のカード${hd.dddGrave}枚をシャッフルして山札の下に置いた`);}
+      else{const dc0=typeof hd.ddd==='function'?hd.ddd(ai,a):hd.ddd;if(dc0===null||dc0===undefined||dc0===false)continue;const dc=dc0>0?Math.max(1,dc0-2*P.bz.filter(x=>D(x).dddRed&&!ignored(x)).length):dc0;const dcv=hd.dddCiv||civsOf(hd);if(!canPay(ai,dc,dcv))continue;
       if(!await askYN(ai,`D・D・D：マナ${dc}を支払って『${hd.name}』を手札から出しますか？`,h,true))continue;
       if(dc>0){const sel=await pickMana(ai,h,dc,dcv);if(!sel)continue;sel.forEach(m=>m.tapped=true);}}
-      G.q29ddd=h.uid;
+      G.q29ddd=h.uid;if(DEFS[h.id].type==='s')G.q29dddSpell=true;
       log('D・D・D！');await playCard(ai,h,{free:true,from:'hand',face:'c',via:'ddd',summon:true});
     }
     for(const h of [...P.hand]){
@@ -2821,9 +2840,10 @@ async function startTurn(pi){
   O.mana.forEach(m=>{if(m.lock===pi)delete m.lock;});
   G.untapPhase=true;P.bz.forEach(c=>{
     if(c.skipUntap){c.skipUntap=false;if(c.tapped)log(`『${nameOf(c)}』はアンタップしない`);}
-    else if(!(D(c).pandora&&(c.pile||[]).length<8)&&!hasU(c,'noUntap')&&!(D(c).noSelfUntap&&!ignored(c)))c.tapped=false;
+    else if(!(D(c).pandora&&(c.pile||[]).length<8)&&!hasU(c,'noUntap')&&!(D(c).noSelfUntap&&!ignored(c))){if(c.tapped&&D(c).onUntap&&!ignored(c))(G.untapQ=G.untapQ||[]).push(c);c.tapped=false;}
     c.sick=false;c.dive=false;c.atkN=0;c.usedT=false;
   });G.untapPhase=false;
+  for(const c of (G.untapQ||[]).splice(0)){if(G.over)break;if(P.bz.includes(c))await D(c).onUntap(pi,c);}
   if(O.bz.some(x=>D(x).untapLock&&!ignored(x)))P.bz.forEach(c=>{if(!c.tapped){setU(c,'noAtk',1-pi);}});
   log(`―― ${P.name}のターン${G.inExtra?'（追加ターン）':''} ――`);render();await sleep(350);
   if(G.debt[pi]>0){
@@ -3002,6 +3022,9 @@ async function chooseSources(pi,card){
     }
     return chosen.length?chosen:null;
   }
+  if(t&&t.multi){const chosen=[];if(G.p[pi].cpu)return pool.slice().sort((a,b)=>cmp(pow(a),pow(b))).slice(0,2);
+    while(true){const L=pool.filter(y=>!chosen.includes(y));if(!L.length)break;const x=await choose(pi,`下に重ねるクリーチャーを選択（${chosen.length}体選択中${chosen.length?'・終わったら「やめる」':''}／${t.label||''}）`,L,null,true);if(!x)break;chosen.push(x);}
+    return chosen.length?chosen:null;}
   const s=await choose(pi,`進化元にするクリーチャーを選択（${t.label||''}）`,pool,t.zone==='grave'?bigPick:weakPick,true);
   return s?[s]:null;
 }
@@ -3370,7 +3393,7 @@ async function manaHooks(pi,e){
 }
 const robinOn=pi=>!!G&&G.p[1-pi].bz.some(x=>D(x).robin&&!ignored(x));
 const isGuardC=c=>!!D(c).guardman||(D(c).kw||[]).includes('guardman')||(c.gk||[]).includes('guardman')||(D(c).kw||[]).includes('superGuard')||(c.gk||[]).includes('superGuard');
-function guardFree(c){return c.owner!==undefined&&isGuardC(c)&&G.p[c.owner].bz.some(x=>D(x).guardBoost&&!ignored(x));}
+function guardFree(c){if(c.owner!==undefined&&G&&G.p&&G.p[c.owner].bz.some(y=>!ignored(y)&&(y.under||[]).some(u=>DEFS[u.id]&&DEFS[u.id].soulIgnoreNoAtk)))return true;return c.owner!==undefined&&isGuardC(c)&&G.p[c.owner].bz.some(x=>D(x).guardBoost&&!ignored(x));}
 /* スペース・チャージ：マナに置かれたカードの文明ごとに能力を使える */
 async function spaceCharge(pi,c,e){
   const sp=D(c).space;if(!sp)return;
@@ -10765,7 +10788,7 @@ DEFS.c1167={name:'炎槍と水剣の裁',civ:['水','火'],cost:6,type:'s',race:
 
 /* ===== DM26-EX5 未収録分（c1168〜） ===== */
 DEFS.c1168={name:'ヒメギャ・ルピア',civ:['光','火'],cost:2,power:1500,type:'c',race:['ファイアー・バード','サムライ'],kw:['gstrike'],
-  allRed:(pi,card)=>hasR(card,'サムライ')?1:0,
+  allRedAny:(pi,card)=>hasR(card,'サムライ')?1:0,
   txt:['G・ストライク','自分のサムライ・カードを実行するコストを1少なくする。ただし、コストは0以下にはならない。']};
 DEFS.c1169={name:'ノワー・ルピア',civ:['闇','火'],cost:2,power:2000,type:'c',race:['ファイアー・バード'],
   allRed:(pi,card)=>DEFS[card.id].type==='c'&&hasR(card,'フェニックス')?(DEFS[card.id].cost>=6?2:1):0,
@@ -11056,7 +11079,7 @@ DEFS.c1224={name:'皇天闘と炎天華の決断',civ:['光','火','自然'],cos
     else if(v===2){const x=await choose(pi,'捨てる手札',P.hand,l=>l.slice().sort((a,b)=>DEFS[b.id].cost-DEFS[a.id].cost)[0]);if(!x)continue;const cv=DEFS[x.id].cost;await discardCard(pi,x);const t=await chooseOpp(pi,`破壊する相手のコスト${cv}以下のクリーチャー`,y=>cc(y)!==INF&&cc(y)<=cv);if(t)await destroy(1-pi,t);}
     else{const x=await choose(pi,'シールド化する手札',P.hand,cpuDiscardPick);if(x){zoneRemove(pi,x,'hand');await addShield(pi,plain(x),false,false);}}}}};
 DEFS.c1225={name:'喜蛇の虚 エルヴリド',civ:['闇','火','自然'],cost:6,power:6000,powTag:'+',type:'c',race:['デーモン・コマンド'],kw:['powered'],
-  neo:{test:x=>civOf(x).some(v=>v==='闇'||v==='火'||v==='自然'),label:'闇、火、または自然のクリーチャー',g:true},
+  neo:{test:x=>civOf(x).some(v=>v==='闇'||v==='火'||v==='自然'),label:'闇、火、または自然のクリーチャー1体以上',g:true,multi:true},
   powerPlus:c=>2000*((c.under||[]).length),
   txt:['超無限G-NEO進化：闇、火、または自然のクリーチャー1体以上の上に置いてもよい。','パワード・ブレイカー','このクリーチャーの下にあるカード1枚につき、このクリーチャーのパワーを+2000する。','このクリーチャーが攻撃する時、このクリーチャーの下にあるカードと同じ枚数、自分の山札の上から表向きにする。その中から、コスト8以下のデーモン・コマンドを好きな数出し、残りを墓地に置く。'],
   async onAttack(pi,c){const n=(c.under||[]).length;if(!n)return;const L=topN(pi,n);log(`表向きにした：${revealTxt(L)}`);const P=G.p[pi];const put=[];
@@ -11102,6 +11125,313 @@ DEFS.c1233={name:'暗雲タル漆黒ノ魔剣',civ:['火'],cost:3,type:'t',race:
   async soulAttack(pi,a){if(D(a).name!=='究極の虚 ジャシン＝ヴリドガルド')return;const kinds=new Set((a.under||[]).map(u=>DEFS[u.id].soulKind).filter(Boolean));if(kinds.size<3)return;
     await massDestroy(G.p[1-pi].bz.filter(x=>D(x).type==='c').map(x=>[1-pi,x]));if(G.over)return;const n=G.p[1-pi].shields.length;if(n)await breakSome(pi,1-pi,a,n);}};
 DEFS.c1227.soulKind='魂';
+
+DEFS.c1234={name:'創世竜 ゴルギーネクスト',civ:['光'],cost:3,power:4000,type:'c',race:['メカ・デル・ディネロ','スーパーカー・ドラゴン'],kw:['escape'],ddd:4,dddCiv:['光','水','自然'],oppPut2:true,
+  txt:['D・D・D[光/水/自然(4)]（自分のクリーチャーが攻撃する時、このコストを支払って、このカードを自分の手札から実行してもよい）','このクリーチャーがD・D・Dで出た時、自分の山札をシャッフルし、上から1枚目を表向きにする。それをコストを支払わずに実行してもよい。そうしなければ、それを手札に加えるかマナゾーンに置く。','相手は各ターン、クリーチャーを2体までしかバトルゾーンに出せない。','エスケープ（このクリーチャーが破壊される時、かわりに自分のシールドを1つ手札に加えてもよい）'],
+  async onEnter(pi,c){if(G.q29ddd!==c.uid)return;G.q29ddd=null;const P=G.p[pi];shuffle(P.deck);const t=P.deck.pop();if(!t)return;log(`山札をシャッフルして、上の『${nameOf(t)}』を表向きにした`);P.hand.push(plain(t));const h=P.hand[P.hand.length-1];
+    const d=DEFS[t.id];const can=(d.type==='c'&&!d.evo&&!putBlocked(pi,h))||(d.type==='t')||(isSpellCard(h)&&!spellBanned(pi,d.type==='s'?d:d.side));
+    if(can&&await askYN(pi,`『${nameOf(t)}』をコストを支払わずに実行しますか？`,h,true)){await playFreeAny(pi,h,'hand',()=>true);return;}
+    const v=await modeAsk(pi,`『${nameOf(t)}』をどうしますか？`,[{label:'手札に加える',value:1},{label:'マナゾーンに置く',value:2}],1);if(v===2){zoneRemove(pi,h,'hand');await putMana(pi,plain(h));log('マナゾーンに置いた');}else log('手札に加えた');render();}};
+{const _pbk29=putBlocked;putBlocked=function(pi,card){if(G&&G.p&&G.p[1-pi]&&DEFS[card.id]&&DEFS[card.id].type==='c'&&G.p[1-pi].bz.some(x=>D(x).oppPut2&&!ignored(x))&&(G.putN[pi]||0)>=2)return true;return _pbk29.apply(this,arguments);};}
+DEFS.c1235={name:"創世竜 Drache der'Zen",civ:['光','水','自然'],cost:3,power:3500,type:'c',race:['マジック・コマンド・ドラゴン'],
+  neo:{test:x=>civOf(x).some(v=>v==='光'||v==='水'||v==='自然'),label:'光、水、または自然のクリーチャー',g:true},
+  allRedAny:(pi,card)=>DEFS[card.id].type==='t'?2:0,manaTama:true,
+  txt:['G-NEO進化：光、水、または自然のクリーチャー1体の上に置いてもよい。','自分のタマシードを実行するコストを2少なくする。ただし、コストは0以下にはならない。','自分のターン中、自分のマナゾーンからタマシードを実行してもよい。そうしたら、自分の山札の上から1枚をタップしてマナゾーンに置いてもよい。','自分のタマシードが出た時、そのタマシードを自分のNEOクリーチャーか進化クリーチャー1体の下に置いてもよい。'],
+  async onMyEnter(pi,x,c){if(D(c).type!=='t'||!G.p[pi].ts.includes(c))return;const P=G.p[pi];const L=P.bz.filter(y=>D(y).type==='c'&&(D(y).evo||y.evolved||(D(y).neo&&(y.under||[]).length)));if(!L.length)return;
+    const t=await choose(pi,`『${nameOf(c)}』を下に置くクリーチャー（置かなくてもよい）`,L,bigPick,true);if(!t||!P.ts.includes(c))return;P.ts.splice(P.ts.indexOf(c),1);t.under=t.under||[];t.under.push(plain(c));log(`『${nameOf(c)}』を『${nameOf(t)}』の下に置いた`);render();}};
+DEFS.c1236={name:'ウルの天宝',civ:['光'],cost:4,type:'t',race:['エンジェル・コマンド','フュージョナー'],st:true,shinka:true,soulKw:['blocker'],
+  txt:['S・トリガー','シンカライズ','このタマシードが出た時、このタマシードから進化できるコスト6以下のNEOクリーチャーを1体、自分の手札からこのタマシードの上に置いてもよい。','超魂X：これがクリーチャーの下にあれば、そのクリーチャーに「ブロッカー」を与える。'],
+  async onEnter(pi,c){const P=G.p[pi];if(!P.ts.includes(c))return;const L=P.hand.filter(h=>{const d=DEFS[h.id];return d.type==='c'&&d.neo&&d.cost<=6&&d.neo.test(c)&&!putBlocked(pi,h);});const h=await choose(pi,'このタマシードの上に置くコスト6以下のNEOクリーチャー',L,bigPick,true);if(!h)return;zoneRemove(pi,h,'hand');await evolveInto(pi,plain(h),[c],{summon:false});}};
+{const _po30=playOptions;playOptions=function(pi,card,zone){const out=_po30(pi,card,zone);try{const P=G.p[pi];
+  if(zone==='mana'&&D(card).type==='t'&&G.cur===pi&&P.bz.some(x=>D(x).manaTama&&!ignored(x)))out.push({key:'c',label:"Drache der'Zen：マナゾーンから実行する",why:castReason(pi,card,'c','mana'),q29tama:true});
+  if(zone==='mana'&&G.cur===pi&&hasR(card,'デーモン・コマンド')&&P.bz.some(x=>!ignored(x)&&(x.under||[]).some(u=>DEFS[u.id].soulMirror))&&!out.some(o=>o.key==='c'))out.push({key:'c',label:'鏡・ソウル：マナゾーンから実行する',why:castReason(pi,card,D(card).type==='s'?'c':'c','mana')});
+  }catch(e){}return out;};}
+{const _rp30=runPlay;runPlay=async function(pi,card,zone,key){const tama=zone==='mana'&&DEFS[card.id]&&DEFS[card.id].type==='t'&&G.p[pi].bz.some(x=>D(x).manaTama&&!ignored(x));const r=await _rp30.apply(this,arguments);
+  if(tama&&r!==false&&!G.over&&!G.p[pi].mana.some(m=>m.card===card)&&await askYN(pi,"Drache der'Zen：山札の上から1枚をタップしてマナゾーンに置きますか？",null,true))await manaTop(pi,1,true);return r;};}
+
+async function q29TamaUnder(pi,c,nm){const P=G.p[pi];const L=P.bz.filter(y=>D(y).type==='c'&&(D(y).evo||y.evolved||(D(y).neo&&(y.under||[]).length)));if(!L.length||!P.ts.includes(c))return;const t=await choose(pi,`このタマシードを下に置くクリーチャー（置かなくてもよい）`,L,bigPick,true);if(!t)return;P.ts.splice(P.ts.indexOf(c),1);t.under=t.under||[];t.under.push(plain(c));log(`${nm}を『${nameOf(t)}』の下に置いた`);render();}
+DEFS.c1237={name:'凶乱タル月光ノ夜鏡',civ:['自然'],cost:2,type:'t',race:['デーモン・コマンド','フュージョナー'],shinka:true,soulMirror:true,soulKind:'鏡',
+  txt:['シンカライズ','このタマシードが出た時、自分の手札を1枚、タップしてマナゾーンに置いてもよい。その後、このタマシードを自分のNEOクリーチャーか進化クリーチャー1体の下に置いてもよい。','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも次の能力を与える。','▶鏡・ソウル：自分のターン中、自分のマナゾーンにあるデーモン・コマンドのカードを、コストを支払って実行してもよい。'],
+  async onEnter(pi,c){const P=G.p[pi];const x=await choose(pi,'タップしてマナゾーンに置く手札（置かなくてもよい）',P.hand,cpuDiscardPick,true);if(x){zoneRemove(pi,x,'hand');await putMana(pi,plain(x),true);log(`『${nameOf(x)}』をタップしてマナゾーンに置いた`);}if(!G.over)await q29TamaUnder(pi,c,'夜鏡');}};
+
+DEFS.c1238={name:'～その怪物、害悪なり～',civ:['水'],cost:2,power:2000,type:'c',race:['アースイーター','スチーム・ナイト'],kw:['blocker'],ddd:6,dddCiv:['光','水','闇'],
+  txt:['D・D・D[光/水/闇(6)]（自分のクリーチャーが攻撃する時、このコストを支払って、このカードを自分の手札から実行してもよい）','ブロッカー','このクリーチャーがD・D・Dで出た時、コスト6以下のクリーチャーを1体、自分の手札か墓地からコストを支払わずに召喚してもよい。そのクリーチャーの「出た時」の能力は2回発動する。','相手が呪文を唱えた時、カードを1枚引いてもよい。'],
+  async onEnter(pi,c){if(G.q29ddd!==c.uid)return;G.q29ddd=null;const P=G.p[pi];const ok=x=>DEFS[x.id].type==='c'&&!DEFS[x.id].evo&&DEFS[x.id].cost<=6&&!putBlocked(pi,x);const L=[...P.hand.filter(ok),...P.grave.filter(ok)];
+    const x=await choose(pi,'コストを支払わずに召喚するコスト6以下のクリーチャー（手札か墓地）',L,bigPick,true);if(!x)return;const fromG=P.grave.includes(x);if(fromG){P.grave.splice(P.grave.indexOf(x),1);P.hand.push(x);}
+    const n0=P.bz.length;await playFreeAny(pi,x,'hand',e=>e.type==='c');const nx=P.bz.find(y=>y.uid===x.uid)||(P.bz.length>n0?P.bz[P.bz.length-1]:null);
+    if(nx&&!G.over&&D(nx).onEnter&&!ignored(nx)){log(`～その怪物、害悪なり～：『${nameOf(nx)}』の「出た時」の能力がもう一度発動する`);await D(nx).onEnter(pi,nx,{summon:true});}},
+  async onOppCast(pi,c){if(await askYN(pi,'～その怪物、害悪なり～：カードを1枚引きますか？',c,G.p[pi].deck.length>5))await draw(pi,1);}};
+DEFS.c1239={name:'グレートブルーの海幻',civ:['水'],cost:3,type:'t',race:['ポセイディア・ドラゴン','フュージョナー'],shinka:true,
+  txt:['シンカライズ','このタマシードが出た時、自分の山札の上から3枚を表向きにする。その中から、クリーチャーを1枚と、クリーチャーではないカードを1枚まで手札に加えてもよい。残りを好きな順序で山札の下に置く。','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも次の能力を与える。','▶このクリーチャーが攻撃する時、コスト4以下のクリーチャーではないカードを1枚、自分の手札からコストを支払わずに実行してもよい。'],
+  async onEnter(pi){const L=topN(pi,3);if(!L.length)return;log(`表向きにした：${revealTxt(L)}`);const P=G.p[pi];const isC=x=>DEFS[x.id].type==='c';
+    const a=await choose(pi,'手札に加えるクリーチャー（1枚まで）',L.filter(isC),bigPick,true);const b=await choose(pi,'手札に加えるクリーチャーではないカード（1枚まで）',L.filter(x=>!isC(x)),bigPick,true);
+    [a,b].filter(Boolean).forEach(x=>P.hand.push(plain(x)));bottomAll(pi,L.filter(x=>x!==a&&x!==b));render();},
+  async soulAttack(pi){const P=G.p[pi];const L=P.hand.filter(h=>{const d=DEFS[h.id];const e=d.type==='c'?d.side:d;return e&&e.type!=='c'&&e.cost<=4&&(e.type!=='s'||!spellBanned(pi,e));});const x=await choose(pi,'海幻（超魂X）：コストを支払わずに実行するコスト4以下のクリーチャーではないカード',L,bigPick,true);if(x)await playFreeAny(pi,x,'hand',e=>e.type!=='c'&&e.cost<=4);}};
+DEFS.c1240={name:'愛馬 デンジャラス＝スベルニル',civ:['闇'],cost:2,power:2000,type:'c',race:['アビスロイヤル'],kw:['slayer'],ddd:6,dddCiv:['水','闇','火'],
+  txt:['D・D・D[水/闇/火(6)]（自分のクリーチャーが攻撃する時、このコストを支払って、このカードを自分の手札から実行してもよい）','スレイヤー','このクリーチャーがD・D・Dで出た時、カードを2枚引き、自分の手札を1枚捨てる。その後、コスト8以下のクリーチャーを1体、自分の墓地から出してもよい。そのクリーチャーは、このターン「スピードアタッカー」を得る。','相手のクリーチャーがコストを支払わずに出た時、相手の手札を見ないで1枚選び、捨てさせる。'],
+  async onEnter(pi,c){if(G.q29ddd!==c.uid)return;G.q29ddd=null;await draw(pi,2);if(G.over)return;await discardN(pi,1);if(G.over)return;const P=G.p[pi];
+    const x=await choose(pi,'墓地から出すコスト8以下のクリーチャー',P.grave.filter(y=>DEFS[y.id].type==='c'&&!DEFS[y.id].evo&&DEFS[y.id].cost<=8&&!putBlocked(pi,y)),bigPick,true);if(!x)return;const n=await putFrom(pi,x,'grave');if(n){n.gk=n.gk||[];n.gk.push('sa');n.sick=false;log(`『${nameOf(n)}』はこのターン「スピードアタッカー」を得た`);}},
+  async onOppEnter(pi,c,x,ctx){if(!ctx||ctx.paid||D(x).type!=='c'||!G.p[1-pi].hand.length)return;log('デンジャラス＝スベルニル：相手の手札を見ないで1枚捨てさせる');await blindDiscard(pi,1);}};
+DEFS.c1241={name:'魔誕妖蟲デンジャラス・ワーム',civ:['火'],cost:2,power:2000,type:'c',race:['パラサイトワーム'],kw:['guardman'],ddd:6,dddCiv:['闇','火','自然'],
+  txt:['D・D・D[闇/火/自然(6)]（自分のクリーチャーが攻撃する時、このコストを支払って、このカードを自分の手札から実行してもよい）','ガードマン','このクリーチャーがD・D・Dで出た時、コスト4以下のエレメントを1つずつ、自分の墓地とマナゾーンから出してもよい。','このクリーチャーが離れた時、自分の手札を1枚捨ててもよい。そうしたら、カードを2枚引く。'],
+  async onEnter(pi,c){if(G.q29ddd!==c.uid)return;G.q29ddd=null;const P=G.p[pi];const ok=x=>(DEFS[x.id].type==='c'||DEFS[x.id].type==='t')&&!DEFS[x.id].evo&&DEFS[x.id].cost<=4&&!putBlocked(pi,x);
+    const g=await choose(pi,'墓地から出すコスト4以下のエレメント',P.grave.filter(ok),bigPick,true);if(g)await putFrom(pi,g,'grave');if(G.over)return;
+    const m=await choose(pi,'マナゾーンから出すコスト4以下のエレメント',P.mana.map(e=>e.card).filter(ok),bigPick,true);if(m)await putFrom(pi,m,'mana');},
+  async onLeave(pi){const P=G.p[pi];if(!P.hand.length)return;const x=await choose(pi,'捨てる手札（捨てると2枚引く）',P.hand,cpuDiscardPick,true);if(!x)return;await discardCard(pi,x);await draw(pi,2);}};
+
+const q29Neo3=(cs,lab)=>({test:x=>civOf(x).some(v=>cs.includes(v)),label:lab});
+DEFS.c1242={name:'～進封せし大悪魔～',civ:['水'],cost:4,power:4000,type:'c',race:['グランド・デビル','スチーム・ナイト'],st:true,oppNoAtkEnterT:true,
+  neo:q29Neo3(['光','水','闇'],'光、水、または闇のクリーチャー'),
+  txt:['S・トリガー','NEO進化：光、水、または闇のクリーチャー1体の上に置いてもよい。','このクリーチャーが出た時、このターンに出た相手のクリーチャーをすべて、持ち主の手札に戻す。','相手のクリーチャーは、バトルゾーンに出たターンには攻撃できない。'],
+  async onEnter(pi){const L=G.p[1-pi].bz.filter(x=>D(x).type==='c'&&x.et===G.turnNo);for(const x of L){if(G.over)return;if(G.p[1-pi].bz.includes(x))await toOwner(x,'hand');}}};
+{const _am29=atkMode;atkMode=function(c){if(c&&D(c).type==='c'&&c.et===G.turnNo&&G.p[1-c.owner].bz.some(x=>D(x).oppNoAtkEnterT&&!ignored(x)))return '';return _am29.apply(this,arguments);};}
+{const _ar29=atkReason;atkReason=function(c){if(c&&D(c).type==='c'&&c.et===G.turnNo&&G.p[1-c.owner].bz.some(x=>D(x).oppNoAtkEnterT&&!ignored(x)))return '～進封せし大悪魔～：出たターンは攻撃できません';return _ar29.apply(this,arguments);};}
+DEFS.c1243={name:'ドクラス＝ドウダクラス',civ:['闇'],cost:3,power:3000,type:'c',race:['アビスロイヤル'],
+  neo:q29Neo3(['水','闇','火'],'水、闇、または火のクリーチャー'),
+  txt:['NEO進化：水、闇、または火のクリーチャー1体の上に置いてもよい。','このクリーチャーが出た時、自分の山札の上から3枚を墓地に置いてもよい。','このクリーチャーが攻撃する時、クリーチャーかタマシードを1枚、自分の墓地からこのクリーチャーの下に置いてもよい。'],
+  async onEnter(pi,c){if(await askYN(pi,'山札の上から3枚を墓地に置きますか？',c,G.p[pi].deck.length>10))await mill(pi,3);},
+  async onAttack(pi,c){const P=G.p[pi];const x=await choose(pi,'このクリーチャーの下に置く、墓地のクリーチャーかタマシード（置かなくてもよい）',P.grave.filter(y=>DEFS[y.id].type==='c'||DEFS[y.id].type==='t'),bigPick,true);if(!x)return;P.grave.splice(P.grave.indexOf(x),1);c.under=c.under||[];c.under.push(plain(x));log(`『${nameOf(x)}』をこのクリーチャーの下に置いた`);render();}};
+DEFS.c1244={name:'禁忌の昇淵 アビスベル',civ:['闇'],cost:4,power:7000,type:'c',race:['アビスロイヤル','フュージョナー'],kw:['slayer','wbreaker'],mustAtk:true,
+  txt:['スレイヤー','W・ブレイカー','このクリーチャーが出た時、自分の山札の上から3枚を墓地に置いてもよい。それらがすべてアビス・カードなら、さらに山札の上から3枚を墓地に置いてもよい。','このクリーチャーは、可能なら毎ターン攻撃する。','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも次の能力を与える。','▶このクリーチャーが攻撃する時、自分の墓地にカードが13枚以上あり、それが《アビスラブ＝ジャシン帝》なら、相手のエレメントと手札をすべて深淵送りにする。'],
+  async onEnter(pi,c){if(!await askYN(pi,'山札の上から3枚を墓地に置きますか？',c,G.p[pi].deck.length>10))return;const P=G.p[pi];const L=P.deck.slice(-3);await mill(pi,3);if(L.length===3&&L.every(x=>hasR(x,'アビス'))&&await askYN(pi,'すべてアビス・カード！ さらに3枚墓地に置きますか？',c,P.deck.length>10))await mill(pi,3);}};
+DEFS.c1245={name:'怒蛇の虚 アゲナルガ',civ:['火'],cost:4,power:10000,type:'c',race:['デーモン・コマンド'],kw:['powered'],st:true,
+  powerPlus:c=>-2000*G.p[c.owner].shields.length,
+  txt:['S・トリガー','パワード・ブレイカー','自分のシールド1つにつき、このクリーチャーのパワーを-2000する。','このクリーチャーが出た時、自分のクリーチャーを1体と相手のクリーチャーを1体選んでもよい。その2体をバトルさせる。'],
+  async onEnter(pi,c){const P=G.p[pi];if(!G.p[1-pi].bz.some(x=>D(x).type==='c'))return;const a=await choose(pi,'バトルさせる自分のクリーチャー（選ばなくてもよい）',P.bz.filter(x=>D(x).type==='c'),strongPick,true);if(!a)return;const t=await chooseOpp(pi,'バトルさせる相手のクリーチャー');if(t&&P.bz.includes(a))await battle(pi,a,1-pi,t);}};
+DEFS.c1246={name:'ZINRAI-灰俺守810',civ:['自然'],cost:4,power:5000,powTag:'+',type:'c',race:['アーマード・ドラゴン','テクノ・サムライ'],st:true,
+  neo:q29Neo3(['光','火','自然'],'光、火、または自然のクリーチャー'),
+  powerPlus:c=>(G.battling&&G.battling.includes(c))?2000*(1+(c.under||[]).length):0,
+  txt:['S・トリガー','NEO進化：光、火、または自然のクリーチャー1体の上に置いてもよい。','バトル中、このクリーチャーのパワーを、このクリーチャーを構成するカード1枚につき+2000する。','このクリーチャーがNEO進化クリーチャーとして出た時、相手のクリーチャーを1体選んでもよい。その選んだクリーチャーとこのクリーチャーをバトルさせる。'],
+  async onEnter(pi,c){if(!(c.under||[]).length)return;await battleOpp(pi,c,'ZINRAIとバトルさせる相手のクリーチャー（選ばなくてもよい）');}};
+DEFS.c1247={name:'剣轟奥義 ドドド・ドギラゴン・ドライブ',civ:['自然'],cost:4,type:'s',race:[],ddd:7,dddCiv:['自然'],
+  txt:['D・D・D[自然(7)]（自分のクリーチャーが攻撃する時、このコストを支払って、このカードを自分の手札から実行してもよい）','自分の山札の上から2枚を表向きにする。その中のクリーチャーとタマシードを好きな数手札に加え、残りをタップしてマナゾーンに置く。','この呪文をD・D・Dで唱えたなら、自分のマナゾーンにあるカードの枚数よりコストが小さいクリーチャーかタマシードを1つ、自分のマナゾーンから出してもよい。'],
+  async onCast(pi){const P=G.p[pi];const viaD=G.q29dddSpell;G.q29dddSpell=null;const L=topN(pi,2);log(`表向きにした：${revealTxt(L)}`);
+    for(const x of L){const t=DEFS[x.id].type;if((t==='c'||t==='t')&&(P.cpu||await askYN(pi,`『${nameOf(x)}』を手札に加えますか？`,x,true)))P.hand.push(plain(x));else await putMana(pi,plain(x),true);}render();
+    if(!viaD||G.over)return;const n=P.mana.length;const y=await choose(pi,`マナゾーンから出すコスト${n}未満のクリーチャーかタマシード`,P.mana.map(m=>m.card).filter(z=>(DEFS[z.id].type==='c'||DEFS[z.id].type==='t')&&!DEFS[z.id].evo&&DEFS[z.id].cost<n&&!putBlocked(pi,z)),bigPick,true);if(y)await putFrom(pi,y,'mana');}};
+DEFS.c1248={name:'メルニアの虹勲章',civ:['光','水','闇'],cost:3,type:'t',race:['リキッド・ピープル','ゴースト','フュージョナー'],shinka:true,soulKw:['blocker','slayer'],
+  txt:['シンカライズ','このタマシードが出た時、相手の手札の枚数と同じ枚数のカードを引く。その後、こうして引いた枚数より1枚少ない枚数、自分の手札を捨てる。','超魂X：これがクリーチャーの下にあれば、そのクリーチャーに「ブロッカー」と「スレイヤー」を与える。'],
+  async onEnter(pi){const n=G.p[1-pi].hand.length;if(!n)return;const h0=G.p[pi].hand.length;await draw(pi,n);const k=Math.max(0,G.p[pi].hand.length-h0-1);if(k)await discardN(pi,k);}};
+DEFS.c1249={name:'ハイヒール＝ハミール',civ:['水','闇','火'],cost:3,power:3000,powTag:'+',type:'c',race:['アビスロイヤル','フュージョナー'],kw:['powered'],soulGraveLeave:true,
+  txt:['このクリーチャーが出た時、自分の山札の上から5枚を墓地に置いてもよい。','パワード・ブレイカー','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも次の能力を与える。','▶各ターン、はじめて自分の墓地からカードが離れた時、このターン、このクリーチャーのパワーを+3000する。その後、カードを1枚引いてもよい。'],
+  async onEnter(pi,c){if(await askYN(pi,'山札の上から5枚を墓地に置きますか？',c,G.p[pi].deck.length>12))await mill(pi,5);}};
+{const _zr29=zoneRemove;zoneRemove=function(pi,card,z){const r=_zr29.apply(this,arguments);
+  try{if(z==='grave'&&G&&G.p&&!G.over){G.gLeaveT=G.gLeaveT||{};const k=pi+':'+G.turnNo;if(!G.gLeaveT[k]){G.gLeaveT[k]=1;const hs=G.p[pi].bz.filter(x=>!ignored(x)&&(D(x).soulGraveLeave||(x.under||[]).some(u=>DEFS[u.id].soulGraveLeave)));
+    if(hs.length)setTimeout(async()=>{for(const x of hs){if(!G||G.over||!G.p[pi].bz.includes(x))continue;await powMod(x,3000);log(`ハミール：『${nameOf(x)}』のパワー+3000（墓地からカードが離れた）`);if(await askYN(pi,'カードを1枚引きますか？',x,G.p[pi].deck.length>5))await draw(pi,1);}},0);}}}catch(e){}
+  return r;};}
+
+DEFS.c1250={name:'デル・フィンの虹勲章',civ:['光','水','自然'],cost:6,type:'t',race:['アポロニア・ドラゴン','フュージョナー'],shinka:true,soulKw:['unblockable'],soulManaCounter:true,
+  txt:['シンカライズ','このタマシードが出た時、各プレイヤーは自身のクリーチャーを1体選び、残りの自身のクリーチャーをすべて持ち主のマナゾーンに置く。','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも以下の能力を与える。','▶このクリーチャーはブロックされない。','▶各ターンに1度、相手がクリーチャーではないカードを実行する時、このエレメントがタップしていれば、かわりにそのカードを持ち主のマナゾーンに置いてもよい。'],
+  async onEnter(pi){for(const q of [pi,1-pi]){if(G.over)return;const L=G.p[q].bz.filter(x=>D(x).type==='c');if(L.length<=1)continue;const keep=await choose(q,'残す自分のクリーチャーを1体選ぶ（残りはマナゾーンへ）',L,bigPick);for(const x of L){if(G.over)return;if(x===keep||!G.p[q].bz.includes(x))continue;await toOwner(x,'mana');}}}};
+DEFS.c1251={name:'コアラ大佐の虹勲章',civ:['光','火','自然'],cost:5,type:'t',race:['ドリームメイト','フュージョナー'],shinka:true,
+  soulGrant:{sa:(y,c)=>D(c).type==='c',powered:(y,c)=>D(c).type==='c'},soulAuraPow:(y,c)=>D(c).type==='c'?3000:0,soulIgnoreNoAtk:true,
+  txt:['シンカライズ','このタマシードが出た時、自分の山札の上から4枚を見る。その中からクリーチャーを、コストの合計が4以下になるように2体まで出してもよい。残りを好きな順序で山札の下に置く。','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも以下の能力を与える。','▶自分のクリーチャーすべてのパワーを+3000し、「スピードアタッカー」と「パワード・ブレイカー」を与え、自分のクリーチャーが持つ、攻撃できない能力を無視する。'],
+  async onEnter(pi){const P=G.p[pi];const L=lookN(pi,4);if(!L.length)return;log(`山札の上から${L.length}枚を見た`);let rest=4,n=0;const out=[];
+    while(n<2&&!G.over){const C=L.filter(x=>!out.includes(x)&&DEFS[x.id].type==='c'&&!DEFS[x.id].evo&&cc(x)!==INF&&cc(x)<=rest&&!putBlocked(pi,x));const x=await choose(pi,`出すクリーチャー（コスト合計あと${rest}以下・出さなくてもよい）`,C,bigPick,true);if(!x)break;out.push(x);rest-=cc(x);n++;}
+    for(const x of L)if(!out.includes(x))P.deck.unshift(plain(x));for(const x of out){if(G.over)return;await putOnBZ(pi,plain(x),{summon:false});}render();}};
+DEFS.c1252={name:'キリューの虹勲章',civ:['闇','火','自然'],cost:5,type:'t',race:['ロスト・クルセイダー','フュージョナー'],soulKw:['powered'],soulPow:6000,
+  async soulPreBreak(pi){if(G.p[pi].deck.length&&await askYN(pi,'キリューの虹勲章（超魂X）：ブレイクの前に、山札の上から1枚をマナゾーンに置きますか？',null,true))await manaTop(pi,1);},
+  txt:['このタマシードが出た時、相手のクリーチャーを1体選ぶ。このターン、そのクリーチャーのパワーを、自分のマナゾーンにあるカード1枚につき-2000する。その後、このタマシードを自分のNEOクリーチャーまたは進化クリーチャー1体の下に置いてもよい。','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも以下の能力を与える。','▶パワード・ブレイカー','▶このクリーチャーのパワーを+6000する。','▶このクリーチャーの各ブレイクの前に、自分の山札の上から1枚をマナゾーンに置いてもよい。'],
+  async onEnter(pi,c){const n=G.p[pi].mana.length;const t=await chooseOpp(pi,`パワーを-${2000*n}する相手のクリーチャー`,x=>D(x).type==='c');if(t&&n){await powMod(t,-2000*n);log(`『${nameOf(t)}』のパワー-${2000*n}`);}if(!G.over)await zeroCheck();if(!G.over)await q29TamaUnder(pi,c,'キリューの虹勲章');}};
+DEFS.c1253={name:'二棒流の超人',civ:['光'],cost:5,power:6000,type:'c',race:['ジャイアント'],kw:['wbreaker'],
+  neo:{test:x=>civOf(x).some(v=>v==='光'||v==='水'||v==='自然'),label:'光、水、または自然のクリーチャー1体'},
+  freeIf:pi=>((G.ncC||{})[pi+':'+G.turnNo]||0)>=2,
+  txt:['G・ゼロ：このターン、自分がクリーチャーではないカードを2枚以上実行していれば、このクリーチャーをコストを支払わずに召喚してもよい。','NEO進化：光、水、または自然のクリーチャー1体の上に置いてもよい。','W・ブレイカー']};
+DEFS.c1254={name:'吟弾の妖精',civ:['光'],cost:3,power:3500,type:'c',race:['ジャイアント','スノーフェアリー'],st:true,
+  neo:{test:x=>civOf(x).some(v=>v==='光'||v==='水'||v==='自然'),label:'光、水、または自然のクリーチャー1体'},
+  txt:['S・トリガー','NEO進化：光、水、または自然のクリーチャー1体の上に置いてもよい。','このクリーチャーが出た時、このクリーチャーに含まれるカード1枚につき、相手のクリーチャーを1体選び、タップする。次の自分のターンのはじめまで、それらはアンタップしない。'],
+  async onEnter(pi,c){const n=1+(c.under||[]).length;const L=G.p[1-pi].bz.filter(x=>D(x).type==='c'&&targetable(pi).includes(x));const ch=await chooseUpTo(pi,`タップしてアンタップさせない相手のクリーチャー（${n}体まで）`,L,Math.min(n,L.length));
+    for(const x of ch){x.tapped=true;setU(x,'noUntap',pi);log(`『${nameOf(x)}』をタップした（次の${G.p[pi].name}のターンのはじめまでアンタップしない）`);}render();}};
+DEFS.c1255={name:'ガリア・ゾールの天宝',civ:['光'],cost:5,type:'t',race:['ガーディアン','サバイバー','フュージョナー'],shinka:true,soulKw:['powered'],soulPow:3000,
+  txt:['シンカライズ','このタマシードが出た時、自分の山札の上から2枚をシールド化する。その後、このタマシードを自分のNEOクリーチャーまたは進化クリーチャー1体の下に置いてもよい。','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも以下の能力を与える。','▶パワード・ブレイカー','▶このクリーチャーのパワーを+3000する。'],
+  async onEnter(pi,c){await shieldTop(pi,2);if(!G.over)await q29TamaUnder(pi,c,'ガリア・ゾールの天宝');}};
+DEFS.c1256={name:'♪離れても 周りが廻り 離回りなり',civ:['光'],cost:2,type:'s',race:['マジック・ソング'],ddd:3,dddCiv:['光'],
+  txt:['D・D・D[光(3)]（自分のクリーチャーが攻撃する時、このカードを光(3)支払って自分の手札から実行してもよい）','自分の山札の上から1枚をシールド化する。この呪文を「D・D・D」で唱えたなら、次の自分のターンのはじめまで、自分のシールドゾーンにあるカードすべてに「S・トリガー」を与える。'],
+  async onCast(pi){const viaD=G.q29dddSpell;G.q29dddSpell=null;await shieldTop(pi,1);if(viaD&&!G.over){G.p[pi].shields.forEach(s=>{s.gST=pi;});log('次の自分のターンのはじめまで、自分のシールドすべてに「S・トリガー」を与えた');}}};
+DEFS.c1257={name:'～アクア・ナイトの不死身な根性～',civ:['水'],cost:3,power:3000,type:'c',race:['リキッド・ピープル','スチーム・ナイト'],underBack:true,
+  neo:{test:x=>civOf(x).some(v=>v==='光'||v==='水'||v==='闇'),label:'光、水、または闇のクリーチャー1体',g:true},
+  txt:['G-NEO進化：光、水、または闇のクリーチャー1体の上に置いてもよい。','カードが自分のクリーチャーの下から墓地に置かれた時、そのカードを自分の墓地から手札に戻してもよい。']};
+{const _lb29=leaveBZ;leaveBZ=async function(pi,c,dest,o){const P=G.p[pi];const us=(c&&c.under||[]).map(u=>u.uid);const r=await _lb29.apply(this,arguments);
+  try{if(us.length&&G&&!G.over&&P.bz.some(x=>D(x).underBack&&!ignored(x))){for(const uid of us){const g=P.grave.find(x=>x.uid===uid);if(!g)continue;if(await askYN(pi,`アクア・ナイト：下から墓地に置かれた『${nameOf(g)}』を手札に戻しますか？`,g,true)){zoneRemove(pi,g,'grave');P.hand.push(plain(g));log(`『${nameOf(g)}』を墓地から手札に戻した`);}}render();}}catch(e){}
+  return r;};}
+
+const q29N3=(x,l)=>civOf(x).some(v=>l.includes(v));
+const q29Abyss=x=>(DEFS[x.id].race||[]).some(r=>r.includes('アビス'));
+DEFS.c1258={name:'～魔弾の発射、準備よし～',civ:['水'],cost:5,power:4000,type:'c',race:['アーク・セラフィム','スチーム・ナイト'],st:true,
+  neo:{test:x=>q29N3(x,['光','水','闇']),label:'光、水、または闇のクリーチャー1体'},
+  txt:['S・トリガー','NEO進化：光、水、または闇のクリーチャー1体の上に置いてもよい。','このクリーチャーが出た時、このクリーチャーに含まれるカード1枚につき、相手のクリーチャーを1体選び、持ち主の手札に戻す。'],
+  async onEnter(pi,c){const n=1+(c.under||[]).length;for(let i=0;i<n&&!G.over;i++){const t=await chooseOpp(pi,`手札に戻す相手のクリーチャー（${i+1}/${n}）`);if(!t)break;await toOwner(t,'hand');}}};
+DEFS.c1259={name:'ブリザド＝ザルド',civ:['水'],cost:7,power:5000,type:'c',race:['アズールアビス'],kw:['blocker'],
+  txt:['このクリーチャーを召喚する時、自分の手札を3枚まで捨てる。こうして捨てたカード1枚につき、このクリーチャーの召喚コストを2少なくする。ただし、コストは0以下にはならない。','ブロッカー','自分のターンのはじめに、カードを1枚引く。'],
+  alt:{label:'手札を3枚まで捨てて、1枚につき召喚コストを2少なくして召喚する',why:(pi,card)=>{if(putBlocked(pi,card))return '今は出せません';const k=Math.min(3,G.p[pi].hand.filter(h=>h!==card).length);if(k<1)return '捨てる手札がありません';return summonLock(pi,card)||payReason(pi,Math.max(1,costOf(pi,card,'c','hand')-2*k),civsOf(D(card)));},
+    async run(pi,card){const P=G.p[pi];const L=await chooseUpTo(pi,'捨てる手札（3枚まで）',P.hand.filter(h=>h!==card),3,cpuDiscardPick);if(!L.length)return false;const cost=Math.max(1,costOf(pi,card,'c','hand')-2*L.length);if(!canPay(pi,cost,civsOf(D(card)))){log('マナが足りません');return false;}const sel=await pickMana(pi,card,cost,civsOf(D(card)));if(!sel)return false;sel.forEach(m=>m.tapped=true);for(const x of L)await discardCard(pi,x);G.playN[pi]++;if(P.hand.includes(card))await playCard(pi,card,{free:true,from:'hand',face:'c',via:'alt',summon:true});return true;}},
+  altCpu:(pi,card)=>G.p[pi].hand.length>=4,
+  async startFx(pi){await draw(pi,1);}};
+DEFS.c1260={name:'ツインヘッドの海幻',civ:['水'],cost:4,type:'t',race:['ゲル・フィッシュ','サバイバー','フュージョナー'],shinka:true,soulKw:['powered'],soulPow:3000,
+  txt:['シンカライズ','このタマシードが出た時、相手のエレメントを1つ選ぶ。相手はそれを山札の上か下に置く。その後、このタマシードを自分のNEOクリーチャーまたは進化クリーチャー1体の下に置いてもよい。','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも以下の能力を与える。','▶パワード・ブレイカー','▶このクリーチャーのパワーを+3000する。'],
+  async onEnter(pi,c){const t=await chooseOppElem(pi,'山札の上か下に置かせる相手のエレメント',()=>true);if(t){const v=await modeAsk(1-pi,`『${nameOf(t)}』を山札のどこに置きますか？`,[{label:'山札の上',value:'deckTop'},{label:'山札の下',value:'deckBottom'}],'deckBottom');await leaveBZ(1-pi,t,v);log(`『${nameOf(t)}』は山札の${v==='deckTop'?'上':'下'}に置かれた`);render();}
+    if(!G.over)await q29TamaUnder(pi,c,'ツインヘッドの海幻');}};
+DEFS.c1261={name:'シンバリー＝パーニー',civ:['闇'],cost:5,power:2000,type:'c',race:['アビスロイヤル'],st:true,
+  neo:{test:x=>q29N3(x,['水','闇','火']),label:'水、闇、または火のクリーチャー1体'},
+  txt:['S・トリガー','NEO進化：水、闇、または火のクリーチャー1体の上に置いてもよい。','このクリーチャーが、進化して出た時、または進化元になる時、相手は自身のクリーチャーを1体選び、破壊する。'],
+  async onEnter(pi,c){if((c.under||[]).length||c.evolved)await DEFS.c1261.onBecomeSrc(pi);},
+  async onBecomeSrc(pi){const L=G.p[1-pi].bz.filter(x=>D(x).type==='c');if(!L.length)return;const t=await choose(1-pi,'破壊する自分のクリーチャー（シンバリー＝パーニー）',L,l=>[...l].sort((a,b)=>cc(a)-cc(b))[0]);if(t)await destroy(1-pi,t);}};
+DEFS.c1262={name:'ゾー＝ジョッソ',civ:['闇'],cost:3,power:6000,type:'c',race:['アビスロイヤル'],kw:['wbreaker'],
+  neo:{test:x=>q29N3(x,['水','闇','火']),label:'水、闇、または火のクリーチャー1体'},
+  txt:['NEO進化：水、闇、または火のクリーチャー1体の上に置いてもよい。','W・ブレイカー','このクリーチャーがアンタップした時、これが進化クリーチャーでなければ、自分の手札を1枚捨てる。'],
+  async onUntap(pi,c){if((c.under||[]).length)return;if(G.p[pi].hand.length){log('ゾー＝ジョッソ：アンタップしたので手札を1枚捨てる');await discardN(pi,1);}}};
+DEFS.c1263={name:'カワグーツ＝アグース',civ:['闇'],cost:2,power:2000,type:'c',race:['アビスロイヤル','フュージョナー'],soulGraveMill:true,
+  txt:['このクリーチャーが出た時、相手のクリーチャーを1体選ぶ。このターン、そのクリーチャーのパワーを-2000する。','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも以下の能力を与える。','▶各ターン、はじめてカードが自分の墓地から離れた時、自分の山札の上から3枚を墓地に置いてもよい。'],
+  async onEnter(pi){const t=await chooseOpp(pi,'パワーを-2000する相手のクリーチャー');if(t){await powMod(t,-2000);await zeroCheck();}}};
+DEFS.c1264={name:'愛・爆・発',civ:['闇'],cost:3,type:'s',race:[],
+  txt:['自分の山札の上から2枚を墓地に置く。その後、闇のコスト4以下の、クリーチャーまたはタマシードを1つ、自分の墓地から出してもよい。'],
+  async onCast(pi){await mill(pi,2);if(G.over)return;const x=await choose(pi,'墓地から出す闇のコスト4以下のクリーチャーかタマシード',G.p[pi].grave.filter(y=>{const d=DEFS[y.id];return (d.type==='c'||d.type==='t')&&!d.evo&&(d.civ||[]).includes('闇')&&d.cost<=4&&!putBlocked(pi,y);}),bigPick,true);if(x)await putFrom(pi,x,'grave');}};
+DEFS.c1265={name:'魔誕邪脚ディメンジョネーク',civ:['火'],cost:3,power:3000,type:'c',race:['ブレインジャッカー'],kw:['sa'],
+  neo:{test:x=>q29N3(x,['闇','火','自然']),label:'闇、火、または自然のクリーチャー1体'},
+  txt:['NEO進化：闇、火、または自然のクリーチャー1体の上に置いてもよい。','スピードアタッカー','このクリーチャーが出た時、自分の手札をすべて捨ててもよい。そうしたら、その枚数より1枚多くカードを引く。'],
+  async onEnter(pi){const P=G.p[pi];const n=P.hand.length;if(!await askYN(pi,`手札をすべて（${n}枚）捨てて、${n+1}枚引きますか？`,null,n<=3))return;for(const h of [...P.hand]){if(G.over)return;await discardCard(pi,h);}if(!G.over)await draw(pi,n+1);}};
+DEFS.c1266={name:'パイロー＝アイロ',civ:['火'],cost:2,power:2000,powTag:'+',type:'c',race:['ルージュアビス'],kw:['powered'],graveLeaveBattle:true,
+  powerPlus:c=>2000*G.p[c.owner].grave.filter(q29Abyss).length,
+  txt:['パワード・ブレイカー','このクリーチャーのパワーを、自分の墓地にあるアビス・カード1枚につき+2000する。','各ターン、はじめてカードが自分の墓地から離れた時、相手のクリーチャーを1体選んでもよい。その選んだクリーチャーとこのクリーチャーをバトルさせる。']};
+DEFS.c1267={name:'ブレイドラッシュの炎霊',civ:['火'],cost:4,type:'t',race:['アーマード・ワイバーン','サバイバー','フュージョナー'],shinka:true,soulKw:['powered'],soulPow:3000,
+  txt:['シンカライズ','このタマシードが出た時、シールドを1つ選び、ブレイクしてもよい。その後、このタマシードを自分のNEOクリーチャーまたは進化クリーチャー1体の下に置いてもよい。','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも以下の能力を与える。','▶パワード・ブレイカー','▶このクリーチャーのパワーを+3000する。'],
+  async onEnter(pi,c){const opts=[{label:'ブレイクしない',value:-1}];if(G.p[1-pi].shields.length)opts.unshift({label:'相手のシールドを1つブレイク',value:1-pi});if(G.p[pi].shields.length)opts.push({label:'自分のシールドを1つブレイク',value:pi});const w=await modeAsk(pi,'ブレイドラッシュの炎霊：シールドを1つ選んでブレイクしますか？',opts,G.p[1-pi].shields.length?1-pi:-1);
+    if(w>=0){const sh=await choose(pi,'ブレイクするシールド',G.p[w].shields,l=>l[0]);if(sh)await breakSome(pi,w,null,1,[sh]);}if(!G.over)await q29TamaUnder(pi,c,'ブレイドラッシュの炎霊');}};
+{const _zr30=zoneRemove;zoneRemove=function(pi,card,z){const r=_zr30.apply(this,arguments);
+  try{if(z==='grave'&&G&&G.p&&!G.over){G.gLeaveT3=G.gLeaveT3||{};const k=pi+':'+G.turnNo;if(!G.gLeaveT3[k]){G.gLeaveT3[k]=1;const P=G.p[pi];
+    const ms=P.bz.filter(x=>!ignored(x)&&(x.under||[]).some(u=>DEFS[u.id].soulGraveMill));const bs=P.bz.filter(x=>!ignored(x)&&D(x).graveLeaveBattle);
+    if(ms.length||bs.length)setTimeout(async()=>{for(const x of ms){if(!G||G.over||!P.bz.includes(x))continue;if(await askYN(pi,'カワグーツ＝アグース（超魂X）：山札の上から3枚を墓地に置きますか？',x,P.deck.length>10))await mill(pi,3);}
+      for(const x of bs){if(!G||G.over||!P.bz.includes(x))continue;await battleOpp(pi,x,'パイロー＝アイロとバトルさせる相手のクリーチャー（選ばなくてもよい）');}},0);}}}catch(e){}
+  return r;};}
+
+const q29Tri=(civs)=>({tri2:civs});
+DEFS.c1268={name:'爆流剣術 絶交の太刀',civ:['火'],cost:2,type:'s',race:[],st:true,ddd:4,dddCiv:['火'],
+  txt:['S・トリガー','D・D・D[火(4)]（自分のクリーチャーが攻撃する時、このカードを火(4)支払って自分の手札から実行してもよい）','このターン、自分のクリーチャー1体のパワーを＋6000し、そのクリーチャーはシールドをさらに1つブレイクする。','このターン、クリーチャーが攻撃していれば、自分と相手のクリーチャーを1体ずつ選んでもよい。その2体をバトルさせる。'],
+  async onCast(pi){G.q29dddSpell=null;const P=G.p[pi];const x=await choose(pi,'パワー+6000し、シールドをさらに1つブレイクする自分のクリーチャー',P.bz.filter(y=>D(y).type==='c'),bigPick);if(x){await powMod(x,6000);x.extraBreak=(x.extraBreak||0)+1;log(`『${nameOf(x)}』のパワー+6000、シールドをさらに1つブレイクする`);}
+    if(G.over||!((G.atkN[0]||0)+(G.atkN[1]||0)>0||G.atkUid!=null))return;const a=await choose(pi,'バトルさせる自分のクリーチャー（選ばなくてもよい）',P.bz.filter(y=>D(y).type==='c'),bigPick,true);if(!a)return;const t=await chooseOpp(pi,'バトルさせる相手のクリーチャー',null,l=>l.filter(y=>pow(y)<pow(a)).sort((p,q)=>pow(q)-pow(p))[0]||null,true);if(t&&P.bz.includes(a))await battle(pi,a,1-pi,t);}};
+DEFS.c1269={name:'KUMPU-外套膝92',civ:['自然'],cost:2,power:2000,type:'c',race:['スノーフェアリー','テクノ・サムライ'],kumpu:true,
+  neo:{test:x=>true,label:'クリーチャー1体',g:true},
+  txt:['G-NEO進化：クリーチャー1体の上に置いてもよい。','自分のクリーチャーがすべての文明を持つかのように、その上に進化クリーチャーを置いてもよい。']};
+DEFS.c1270={name:'歓喜老GO-GEKI-63',civ:['自然'],cost:3,power:12000,type:'c',race:['アース・ドラゴン','ジャイアント','テクノ・サムライ'],kw:['tbreaker'],
+  canAtkIf:c=>G.p[c.owner].bz.some(x=>D(x).type==='c'&&(D(x).evo||(D(x).neo&&(x.under||[]).length)||x.evolved)),
+  txt:['T・ブレイカー','自分の進化クリーチャーがなければ、このクリーチャーは攻撃できない。']};
+DEFS.c1271={name:'シェル・ファクトリーの地版',civ:['自然'],cost:3,type:'t',race:['コロニー・ビートル','サバイバー','フュージョナー'],shinka:true,soulKw:['powered'],soulPow:3000,
+  txt:['シンカライズ','このタマシードが出た時、相手のコスト5以下のエレメントを1つ選び、持ち主のマナゾーンに置いてもよい。その後、このタマシードを自分のNEOクリーチャーまたは進化クリーチャー1体の下に置いてもよい。','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも以下の能力を与える。','▶パワード・ブレイカー','▶このクリーチャーのパワーを+3000する。'],
+  async onEnter(pi,c){const t=await chooseOppElem(pi,'マナゾーンに置く相手のコスト5以下のエレメント（選ばなくてもよい）',x=>cc(x)!==INF&&cc(x)<=5,true);if(t)await toOwner(t,'mana');if(!G.over)await q29TamaUnder(pi,c,'シェル・ファクトリーの地版');}};
+DEFS.c1272={name:'～破壊と殺戮の連鎖～',civ:['光','水','闇'],cost:3,power:3000,type:'c',race:['デーモン・コマンド','パラサイトワーム','スチーム・ナイト'],tri2:['光','水','闇'],
+  neo:{test:x=>q29N3(x,['光','水','闇']),label:'光、水、または闇のクリーチャー1体'},
+  txt:['自分のマナゾーンに光、水、闇の各文明があれば、このクリーチャーを無色(2)支払って召喚してもよい。','NEO進化：光、水、または闇のクリーチャー1体の上に置いてもよい。','このクリーチャーが出た時、自分の山札の上から1枚をシールド化する。'],
+  async onEnter(pi){await shieldTop(pi,1);}};
+DEFS.c1273={name:'大集合！アカネ＆アサギ＆コハク',civ:['光','水','自然'],cost:3,power:3000,type:'c',race:['ジャイアント','スノーフェアリー'],tri2:['光','水','自然'],
+  neo:{test:x=>q29N3(x,['光','水','自然']),label:'光、水、または自然のクリーチャー1体'},
+  txt:['自分のマナゾーンに光、水、自然の各文明があれば、このクリーチャーを無色(2)支払って召喚してもよい。','NEO進化：光、水、または自然のクリーチャー1体の上に置いてもよい。','このクリーチャーが出た時、自分の山札の上から2枚を見る。その中から1枚を手札に加えるかマナゾーンに置き、残りの1枚を山札の下に置く。'],
+  async onEnter(pi){const P=G.p[pi];const L=lookN(pi,2);if(!L.length)return;log(`山札の上から${L.length}枚を見た`);const x=await choose(pi,'手札に加えるかマナゾーンに置くカード',L,bigPick);const v=await modeAsk(pi,`『${nameOf(x)}』をどうしますか？`,[{label:'手札に加える',value:'hand'},{label:'マナゾーンに置く',value:'mana'}],P.mana.length<6?'mana':'hand');
+    if(v==='hand'){P.hand.push(plain(x));log(`『${nameOf(x)}』を手札に加えた`);}else await putMana(pi,plain(x),false);for(const y of L)if(y!==x)P.deck.unshift(plain(y));render();}};
+DEFS.c1274={name:'HIMEGYA-流予見618',civ:['光','火','自然'],cost:3,power:3000,type:'c',race:['ファイアー・バード','テクノ・サムライ'],tri2:['光','火','自然'],dddRed:true,
+  neo:{test:x=>q29N3(x,['光','火','自然']),label:'光、火、または自然のクリーチャー1体'},
+  txt:['自分のマナゾーンに光、火、自然の各文明があれば、このクリーチャーを無色(2)支払って召喚してもよい。','NEO進化：光、火、または自然のクリーチャー1体の上に置いてもよい。','自分の「D・D・D」コストを2少なくする。ただし、コストは0以下にはならない。']};
+DEFS.c1275={name:'トレース＝トレーシー',civ:['水','闇','火'],cost:3,power:3000,type:'c',race:['アビスロイヤル'],tri2:['水','闇','火'],
+  neo:{test:x=>q29N3(x,['水','闇','火']),label:'水、闇、または火のクリーチャー1体'},
+  txt:['自分のマナゾーンに水、闇、火の各文明があれば、このクリーチャーを無色(2)支払って召喚してもよい。','NEO進化：水、闇、または火のクリーチャー1体の上に置いてもよい。','このクリーチャーが出た時、自分の山札の上から1枚を墓地に置く。その後、クリーチャーまたはタマシードを1つ、自分の墓地から手札に戻してもよい。'],
+  async onEnter(pi){await mill(pi,1);if(G.over)return;const P=G.p[pi];const x=await choose(pi,'墓地から手札に戻すクリーチャーかタマシード（戻さなくてもよい）',P.grave.filter(y=>DEFS[y.id].type==='c'||DEFS[y.id].type==='t'),bigPick,true);if(x){zoneRemove(pi,x,'grave');P.hand.push(plain(x));log(`『${nameOf(x)}』を墓地から手札に戻した`);render();}}};
+DEFS.c1276={name:'哀蛇の虚 シンロッチ',civ:['闇','火','自然'],cost:3,power:3000,type:'c',race:['デーモン・コマンド'],tri2:['闇','火','自然'],
+  neo:{test:x=>q29N3(x,['闇','火','自然']),label:'闇、火、または自然のクリーチャー1体'},
+  txt:['自分のマナゾーンに闇、火、自然の各文明があれば、このクリーチャーを無色(2)支払って召喚してもよい。','NEO進化：闇、火、または自然のクリーチャー1体の上に置いてもよい。','このクリーチャーが攻撃する時、自分の山札の上から2枚を表向きにする。その中のクリーチャーを1体手札に加えてもよい。残りを墓地に置く。'],
+  async onAttack(pi){const P=G.p[pi];const L=topN(pi,2);if(!L.length)return;log(`表向きにした：${revealTxt(L)}`);const x=await choose(pi,'手札に加えるクリーチャー（加えなくてもよい）',L.filter(y=>DEFS[y.id].type==='c'),bigPick,true);for(const y of L){if(y===x){P.hand.push(plain(y));log(`『${nameOf(y)}』を手札に加えた`);}else P.grave.push(plain(y));}render();}};
+DEFS.c1277={name:'「朽ちれども!?なら回転してみせよう、そうジェネシス!!」',civ:['自然'],cost:3,type:'s',race:[],st:true,ddd:4,dddCiv:['自然'],
+  txt:['S・トリガー','D・D・D[自然(4)]（自分のクリーチャーが攻撃する時、このカードを自然(4)支払って自分の手札から実行してもよい）','自分の山札の上から1枚をマナゾーンに置く。','このターン、クリーチャーが攻撃していれば、相手のコスト5以下のエレメントを1つ選び、持ち主のマナゾーンに置いてもよい。'],
+  async onCast(pi){G.q29dddSpell=null;await manaTop(pi,1);if(G.over||!((G.atkN[0]||0)+(G.atkN[1]||0)>0||G.atkUid!=null))return;const t=await chooseOppElem(pi,'マナゾーンに置く相手のコスト5以下のエレメント（選ばなくてもよい）',x=>cc(x)!==INF&&cc(x)<=5,true);if(t)await toOwner(t,'mana');}};
+
+DEFS.c1278={name:'撃機音愛 クルーカ',civ:['光'],cost:3,power:4500,type:'c',race:['マジック・マーメイド'],
+  neo:{test:x=>q29N3(x,['光','水','自然']),label:'光、水、または自然のクリーチャー1体'},
+  txt:['NEO進化：光、水、または自然のクリーチャー1体の上に置いてもよい。','自分のターンの終わりに、このクリーチャーをアンタップする。'],
+  async endFx(pi,c){if(c.tapped){c.tapped=false;log(`『${nameOf(c)}』をアンタップした`);render();}}};
+DEFS.c1279={name:'経理人形アリミ',civ:['光'],cost:9,power:15000,type:'c',race:['マジック・デスパペット'],kw:['blocker','tbreaker'],
+  symp:pi=>2*(G.p[pi].ts||[]).length,sympMin:1,
+  txt:['ダブル・シンパシー：タマシード（このクリーチャーの召喚コストを、自分のタマシード1つにつき2少なくする。ただしコストは0以下にはならない）','ブロッカー','T・ブレイカー']};
+DEFS.c1280={name:'星姫械 ペナルティフリート',civ:['光'],cost:4,power:4500,type:'c',race:['メカ・デル・ステラ'],st:true,kw:['blocker'],
+  txt:['S・トリガー','ブロッカー','このクリーチャーが出た時、相手のマナゾーンにあるカードの枚数よりコストが大きい相手のクリーチャーを1体選び、持ち主の山札の下に置く。'],
+  async onEnter(pi){const n=G.p[1-pi].mana.length;const t=await chooseOpp(pi,`山札の下に置く相手のコスト${n+1}以上のクリーチャー`,x=>cc(x)!==INF&&cc(x)>n);if(t){await leaveBZ(1-pi,t,'deckBottom');log(`『${nameOf(t)}』を山札の下に置いた`);render();}}};
+DEFS.c1281={name:'看護妖精ヴェヌアック',civ:['光'],cost:2,power:2000,type:'c',race:['スノーフェアリー'],saverMulti:true,
+  allRedAny:(pi,card,x,face)=>{const dd=defOf(card,face||'c');return (dd.civ||[]).some(v=>v==='水'||v==='自然')?1:0;},
+  txt:['自分の、水または自然のカードを実行するコストを1少なくする。ただし、コストは0以下にはならない。','セイバー：多色エレメント（自分の多色エレメントが破壊される時、かわりにこのクリーチャーを破壊してもよい）']};
+
+DEFS.c1282={name:'クルトの天宝',civ:['光'],cost:1,type:'t',race:['ライトブリンガー','フュージョナー'],kw:['gstrike'],shinka:true,soulTapSave:true,
+  txt:['G・ストライク','シンカライズ','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも以下の能力を与える。','▶このエレメントが離れる時、これがアンタップしていれば、かわりにこれをタップしてもよい。']};
+DEFS.c1283={name:'～叡智、自在なり～',civ:['水'],cost:2,power:2000,type:'c',race:['グランド・デビル','スチーム・ナイト'],
+  neo:{test:x=>q29N3(x,['光','水','闇']),label:'光、水、または闇のクリーチャー1体'},
+  txt:['NEO進化：光、水、または闇のクリーチャー1体の上に置いてもよい。','このクリーチャーが攻撃する時、カードを2枚引いてもよい。そうしたら、自分の手札を2枚捨てる。'],
+  async onAttack(pi){if(!G.p[pi].deck.length||!await askYN(pi,'カードを2枚引いて、手札を2枚捨てますか？',null,true))return;await draw(pi,2);if(!G.over)await discardN(pi,2);}};
+DEFS.c1284={name:'～大海の支配者～',civ:['水'],cost:2,power:2000,type:'c',race:['マーフォーク','スチーム・ナイト'],hexproof:true,
+  neo:{test:x=>q29N3(x,['光','水','闇']),label:'光、水、または闇のクリーチャー1体'},
+  txt:['NEO進化：光、水、または闇のクリーチャー1体の上に置いてもよい。','このクリーチャーは、相手に選ばれない。（ただし、このクリーチャーを攻撃またはブロックしてもよい）']};
+DEFS.c1285={name:'看護妖精メルクリラス',civ:['水'],cost:2,power:2000,type:'c',race:['スノーフェアリー'],saverMulti:true,
+  allRedAny:(pi,card,x,face)=>{const dd=defOf(card,face||'c');return (dd.civ||[]).some(v=>v==='光'||v==='闇')?1:0;},
+  txt:['自分の、光または闇のカードを実行するコストを1少なくする。ただし、コストは0以下にはならない。','セイバー：多色エレメント（自分の多色エレメントが破壊される時、かわりにこのクリーチャーを破壊してもよい）']};
+
+DEFS.c1286={name:'プロメフィウスの海幻',civ:['水'],cost:5,type:'t',race:['シー・ハッカー','サバイバー','フュージョナー'],st:true,shinka:true,
+  async soulAttack(pi){if(G.p[pi].deck.length&&await askYN(pi,'プロメフィウスの海幻（超魂X）：カードを1枚引きますか？',null,true))await draw(pi,1);},
+  txt:['S・トリガー','このタマシードが出た時、相手のクリーチャーを1体選び、持ち主の手札に戻す。','シンカライズ','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも以下の能力を与える。','▶このクリーチャーが攻撃する時、カードを1枚引いてもよい。'],
+  async onEnter(pi){const t=await chooseOpp(pi,'手札に戻す相手のクリーチャー');if(t)await toOwner(t,'hand');}};
+DEFS.c1287={name:'ソルジャーの海幻',civ:['水'],cost:1,type:'t',race:['リキッド・ピープル','フュージョナー'],kw:['gstrike'],shinka:true,soulHexCost:true,
+  txt:['G・ストライク','シンカライズ','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも以下の能力を与える。','▶このクリーチャーは、このクリーチャー以下のコストのカードによって相手に選ばれない。']};
+DEFS.c1288={name:'ギャラップ＝ギャロップ',civ:['闇'],cost:3,power:3000,type:'c',race:['アビスロイヤル'],kw:['slayer'],
+  neo:{test:x=>q29N3(x,['水','闇','火']),label:'水、闇、または火のクリーチャー1体'},
+  txt:['NEO進化：水、闇、または火のクリーチャー1体の上に置いてもよい。','スレイヤー','このクリーチャーが破壊された時、これが進化クリーチャーなら、このクリーチャーを自分の墓地から出す。'],
+  async onDestroyed(pi,c){if(!((c.under||[]).length||c.evolved))return;const g=G.p[pi].grave.find(x=>x.uid===c.uid)||G.p[pi].grave.slice().reverse().find(x=>x.id==='c1288');if(g&&!putBlocked(pi,g)){log('ギャラップ＝ギャロップ：墓地から出す');await putFrom(pi,g,'grave');}}};
+DEFS.c1289={name:'看護妖精サートゥルジョー',civ:['闇'],cost:2,power:2000,type:'c',race:['スノーフェアリー'],saverMulti:true,
+  allRedAny:(pi,card,x,face)=>{const dd=defOf(card,face||'c');return (dd.civ||[]).some(v=>v==='水'||v==='火')?1:0;},
+  txt:['自分の、水または火のカードを実行するコストを1少なくする。ただし、コストは0以下にはならない。','セイバー：多色エレメント（自分の多色エレメントが破壊される時、かわりにこのクリーチャーを破壊してもよい）']};
+
+DEFS.c1290={name:'オア：ナテハ',civ:['闇'],cost:2,power:2000,type:'c',race:['ノワールアビス'],
+  txt:['このクリーチャーが出た時、相手の手札を1枚見ないで選び、捨てさせる。','このクリーチャーが破壊された時、相手はカードを1枚引く。'],
+  async onEnter(pi){await blindDiscard(pi,1);},async onDestroyed(pi){await draw(1-pi,1);}};
+DEFS.c1291={name:'深淵の記念碑',civ:['闇'],cost:1,type:'t',race:['アビスロイヤル','フュージョナー'],kw:['gstrike'],shinka:true,
+  async soulAttack(pi,a){const n=cc(a);if(n===INF||!n||!G.p[pi].deck.length)return;if(await askYN(pi,`深淵の記念碑（超魂X）：山札の上から${n}枚を墓地に置きますか？`,null,G.p[pi].deck.length>n+8))await mill(pi,n);},
+  txt:['G・ストライク','シンカライズ','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも以下の能力を与える。','▶このクリーチャーが攻撃する時、このクリーチャーのコストと同じ枚数、自分の山札の上から墓地に置いてもよい。']};
+DEFS.c1292={name:'昇邪淵',civ:['闇'],cost:4,type:'s',race:[],st:true,
+  txt:['S・トリガー','相手のクリーチャーを1体選び、破壊する。その後、選んだクリーチャーのコストと同じ枚数、自分の山札の上から墓地に置く。'],
+  async onCast(pi){const t=await chooseOpp(pi,'破壊する相手のクリーチャー');if(!t)return;const n=cc(t);await destroy(1-pi,t);if(!G.over&&n!==INF&&n>0)await mill(pi,n);}};
+DEFS.c1293={name:'魔誕音像サーペント・ギター',civ:['火'],cost:5,power:6000,type:'c',race:['ガーゴイル'],kw:['wbreaker'],
+  neo:{test:x=>q29N3(x,['闇','火','自然']),label:'闇、火、または自然のクリーチャー1体'},
+  costRed:(pi,card)=>{if(G.pendNeo===card.uid)return 2;if(G.pendNeo==='no:'+card.uid)return 0;return evoPool(pi,card).length?2:0;},
+  txt:['NEO進化：闇、火、または自然のクリーチャー1体の上に置いてもよい。','NEO進化クリーチャーとして召喚するなら、このクリーチャーの召喚コストを2少なくする。','W・ブレイカー']};
+DEFS.c1294={name:'蛇誕怪人ギャスカ',civ:['火'],cost:3,power:1000,type:'c',race:['デビルマスク'],kw:['sa'],dddDisc:'火',
+  txt:['D・D・D：火のカード1枚を自分の手札から捨てる（自分のクリーチャーが攻撃する時、このカードを、火のカードを1枚自分の手札から捨てて、自分の手札から実行してもよい）','スピードアタッカー']};
+DEFS.c1295={name:'看護妖精マルスブジン',civ:['火'],cost:2,power:2000,type:'c',race:['スノーフェアリー'],saverMulti:true,
+  allRedAny:(pi,card,x,face)=>{const dd=defOf(card,face||'c');return (dd.civ||[]).some(v=>v==='闇'||v==='自然')?1:0;},
+  txt:['自分の、闇または自然のカードを実行するコストを1少なくする。ただし、コストは0以下にはならない。','セイバー：多色エレメント（自分の多色エレメントが破壊される時、かわりにこのクリーチャーを破壊してもよい）']};
+
+DEFS.c1296={name:'メルテオ＝メッテオ',civ:['火'],cost:2,power:1000,powTag:'+',type:'c',race:['ルージュアビス','フュージョナー'],st:true,
+  soulPowF:c=>(G.battling&&G.battling.includes(c))?3000:0,
+  txt:['S・トリガー','このクリーチャーが出た時、相手の、クリーチャーではないエレメントを1つ選び、破壊する。','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも以下の能力を与える。','▶バトル中、このクリーチャーのパワーを+3000する。'],
+  async onEnter(pi){const L=G.p[1-pi].ts||[];if(!L.length)return;const t=await choose(pi,'破壊する相手のクリーチャーではないエレメント',L,bigPick);if(t)await destroy(1-pi,t);}};
+DEFS.c1297={name:'クック・ポロンの炎霊',civ:['火'],cost:1,type:'t',race:['ファイアー・バード','フュージョナー'],kw:['gstrike'],shinka:true,soulNoBeAtk:true,
+  txt:['G・ストライク','シンカライズ','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも以下の能力を与える。','▶このクリーチャーは攻撃されない。']};
+DEFS.c1298={name:'罰来KIRIN-28',civ:['自然'],cost:4,power:5000,powTag:'+',type:'c',race:['ドリームメイト','テクノ・サムライ'],kw:['mach'],
+  neo:{test:x=>q29N3(x,['光','火','自然']),label:'光、火、または自然のクリーチャー1体'},
+  powerPlus:c=>((c.under||[]).length||c.evolved)?4000:0,grant:{powered:(x,c)=>x===c&&!!((c.under||[]).length||c.evolved)},
+  txt:['NEO進化：光、火、または自然のクリーチャー1体の上に置いてもよい。','マッハファイター','これが進化クリーチャーなら、このクリーチャーのパワーを+4000し、「パワード・ブレイカー」を与える。']};
+DEFS.c1299={name:'看護妖精ユピブッカ',civ:['自然'],cost:2,power:2000,type:'c',race:['スノーフェアリー'],saverMulti:true,
+  allRedAny:(pi,card,x,face)=>{const dd=defOf(card,face||'c');return (dd.civ||[]).some(v=>v==='光'||v==='火')?1:0;},
+  txt:['自分の、光または火のカードを実行するコストを1少なくする。ただし、コストは0以下にはならない。','セイバー：多色エレメント（自分の多色エレメントが破壊される時、かわりにこのクリーチャーを破壊してもよい）']};
+
+DEFS.c1300={name:'ARA結-510',civ:['自然'],cost:2,power:2000,type:'c',race:['ワイルド・ベジーズ','テクノ・サムライ'],
+  neo:{test:x=>q29N3(x,['光','火','自然']),label:'光、火、または自然のクリーチャー1体'},
+  txt:['NEO進化：光、火、または自然のクリーチャー1体の上に置いてもよい。','このクリーチャーが出た時、このクリーチャーをタップしてマナゾーンに置いてもよい。'],
+  async onEnter(pi,c){const P=G.p[pi];if(!P.bz.includes(c)||!await askYN(pi,`『${nameOf(c)}』をタップしてマナゾーンに置きますか？`,c,P.mana.length<6&&!(c.under||[]).length))return;const uid=c.uid;await leaveBZ(pi,c,'mana');P.mana.forEach(m=>{if(m.card.uid===uid)m.tapped=true;});render();}};
+DEFS.c1301={name:'スマッシュ・ホーンの地版',civ:['自然'],cost:6,type:'t',race:['ホーン・ビースト','サバイバー','フュージョナー'],st:true,shinka:true,machOnSrc:true,
+  txt:['S・トリガー','このタマシードが出た時、相手のクリーチャーを1体選び、持ち主のマナゾーンに置く。','シンカライズ','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも以下の能力を与える。','▶このエレメントが進化元になる時、このターン、それに「マッハファイター」を与える。'],
+  async onEnter(pi){const t=await chooseOpp(pi,'マナゾーンに置く相手のクリーチャー');if(t)await toOwner(t,'mana');}};
+DEFS.c1302={name:'メリッサの地版',civ:['自然'],cost:1,type:'t',race:['スノーフェアリー','フュージョナー'],kw:['gstrike'],shinka:true,soulManaSave:true,
+  txt:['G・ストライク','シンカライズ','超魂X：これがクリーチャーの下にあれば、そのクリーチャーにも以下の能力を与える。','▶このエレメントが離れる時、かわりにタップしてマナゾーンに置いてもよい。']};
+{const _to32=targetOptions;targetOptions=function(pi,a){return _to32(pi,a).filter(o=>!(o.value&&o.value.kind==='creature'&&o.value.c&&!ignored(o.value.c)&&(o.value.c.under||[]).some(u=>DEFS[u.id]&&DEFS[u.id].soulNoBeAtk)));};}
+
+/* 無色(2)で召喚（3文明そろい） */
+{const _po31=playOptions;playOptions=function(pi,card,zone){const out=_po31(pi,card,zone);try{const d=DEFS[card.id];if(zone==='hand'&&d&&d.tri2){let why;if(!q29Has3(pi,d.tri2))why=`マナゾーンに${d.tri2.join('・')}がそろっていません`;else{G.tri2on=card.uid;try{why=castReason(pi,card,'c','hand');}finally{G.tri2on=null;}}out.push({key:'tri2',label:'無色(2)支払って召喚する（3文明そろい）',why});}}catch(e){}return out;};}
+{const _rp31=runPlay;runPlay=async function(pi,card,zone,key){if(key!=='tri2')return _rp31.apply(this,arguments);G.tri2on=card.uid;try{return await _rp31.call(this,pi,card,zone,'c');}finally{G.tri2on=null;}};}
+{const _co31=costOf;costOf=function(pi,card,face,from,mod){if(G&&G.tri2on&&card&&card.uid===G.tri2on&&face!=='s')return 2;return _co31.apply(this,arguments);};}
+{const _cp31=canPay;canPay=function(pi,cost,civs,ex){if(G&&G.tri2on)civs=[];return _cp31.call(this,pi,cost,civs,ex);};}
+{const _pm31=pickMana;pickMana=async function(pi,card,need,civs,ex){if(G&&G.tri2on&&card&&card.uid===G.tri2on)civs=[];return _pm31.call(this,pi,card,need,civs,ex);};}
 
 UI.offCache={};
 CARD_IDS=Object.keys(DEFS).filter(k=>!DEFS[k].gr&&!DEFS[k].hidden).sort((a,b)=>+a.slice(1)-+b.slice(1));
